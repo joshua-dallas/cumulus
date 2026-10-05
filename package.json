@@ -1,0 +1,27 @@
+{
+  "name": "cumulus",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/cumulus.js",
+  "module": "./dist/cumulus.js",
+  "exports": {
+    ".": "./dist/cumulus.js",
+    "./define": "./dist/define.js"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "sideEffects": [
+    "./src/define.js",
+    "./dist/define.js"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.3.2"
+  }
+}
