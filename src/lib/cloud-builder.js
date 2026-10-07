@@ -1,4 +1,4 @@
-import { mulberry32, unionOfMany, subtractRanges } from "./utils.js";
+import { mulberry32, intersectionOfMany, subtractRanges } from "./utils.js";
 
 export class CloudBuilder {
   static MAX_CELLS = 100;
@@ -34,6 +34,7 @@ export class CloudBuilder {
 
     this.generateCells(Math.min(numCells, CloudBuilder.MAX_CELLS));
     this.matchBottomCell();
+    //this.sortBySize(); //TODO
     this.addExtensionLines();
     this.fillInnerGaps();
     this.createCloudInner();
@@ -137,9 +138,9 @@ export class CloudBuilder {
       if (gapsFound.length > 0) {
         let largestGap = Math.min(...gapsFound);
         currentCell.upperExtension = currentCell.y - largestGap + 1;
-        console.log(
+        /*console.log(
           `Found a gap for cell ${currentCell.id} on the ${side}. Setting upper extension to ${currentCell.upperExtension}`,
-        );
+        );*/
       }
     }
   }
@@ -282,8 +283,6 @@ export class CloudBuilder {
 
     // Find the gaps in the RHS
     // Look for consecutive points in the right polygon that are along the centreline
-    console.log(this.cloudInnerLeft);
-    console.log(this.cloudInnerRight);
 
     let rhsGaps = this.findGapsOfCloudInnerAlongCentre("right");
     let lhsGaps = this.findGapsOfCloudInnerAlongCentre("left");
@@ -312,12 +311,9 @@ export class CloudBuilder {
       lhsGaps.push([lhsBottom, rhsBottom]);
     }
 
-    console.log([...lhsGaps]);
-    console.log([...rhsGaps]);
-
     // Find the union of the gaps, these locations do not need halfdomes
-    let gapUnions = unionOfMany(lhsGaps, rhsGaps);
-    console.log(`gapUnions: ${gapUnions}`);
+    let gapUnions = intersectionOfMany(lhsGaps, rhsGaps);
+    // TODO: If we want to remove horizontal breaks, here is where to find them, possibly
 
     // RHS half domes = rhs gap - unions
     let rhsFills = [];
@@ -331,9 +327,6 @@ export class CloudBuilder {
       lhsFills = lhsFills.concat(subtractRanges(gap, gapUnions));
     }
 
-    console.log(`rhsFills: ${JSON.stringify(rhsFills)}`);
-    console.log(`lhsFills: ${JSON.stringify(lhsFills)}`);
-
     this.fillCircles = [];
     let allFills = rhsFills.concat(lhsFills);
     for (const fill of allFills) {
@@ -345,8 +338,6 @@ export class CloudBuilder {
         radius,
       });
     }
-
-    console.log(JSON.stringify(this.fillCircles, 0, 2));
   }
 
   randomCellRadius() {

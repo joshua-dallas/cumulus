@@ -9,26 +9,57 @@ export function mulberry32(seed) {
   };
 }
 
-export function union(a, b) {
-  const unionStart = Math.max(a[0], b[0]);
-  const unionEnd = Math.min(a[1], b[1]);
-  if (unionStart < unionEnd) {
-    return [unionStart, unionEnd];
+export function intersection(a, b) {
+  const intersectionStart = Math.max(a[0], b[0]);
+  const intersectionEnd = Math.min(a[1], b[1]);
+  if (intersectionStart < intersectionEnd) {
+    return [intersectionStart, intersectionEnd];
   }
   return undefined;
 }
 
-export function unionOfMany(listA, listB) {
-  let unions = [];
+// TODO: Better name
+export function intersectionOfMany(listA, listB) {
+  // Returns the intersection of two lists of ranges
+  // I.e. (union listA) intersection with (union listB)
+  let intersections = [];
   for (const a of listA) {
     for (const b of listB) {
-      const overlap = union(a, b);
+      const overlap = intersection(a, b);
       if (overlap) {
-        unions.push(overlap);
+        intersections.push(overlap);
       }
     }
   }
-  return unions;
+  return intersections;
+}
+
+export function subtractRange(a, b) {
+  // Subtracts the range b from the range a
+  // Returns a list of ranges
+
+  const overlap = intersection(a, b);
+  if (overlap) {
+    if (overlap == a) {
+      // The entire range a was intersected by b
+      return [];
+    } else if (overlap[0] == a[0]) {
+      // If the union lines up with the beggining of a, shorten the remaining
+      return [[overlap[1], a[1]]];
+    } else if (overlap[1] == a[1]) {
+      // If the union lines up with the end of a, shorten the remaining
+      return [[a[0], overlap[0]]];
+    } else {
+      // If the intersection splits 'a' in two, return two new ranges
+      return [
+        [a[0], overlap[0]],
+        [overlap[1], a[1]],
+      ];
+    }
+  } else {
+    // Return the original range if there was no intersection
+    return [...a];
+  }
 }
 
 export function subtractRanges(a, listB) {
@@ -38,14 +69,14 @@ export function subtractRanges(a, listB) {
   let newRanges = [];
   for (const b of listB) {
     // find the overlap between the remaining range of a and the current range from listB
-    let overlap = union(remaining, b);
+    let overlap = intersection(remaining, b);
 
     if (overlap) {
       if (overlap[0] == remaining[0]) {
-        // If the union lines up with the beggining of remaining, shorten the remaining
+        // If the overlap lines up with the beggining of remaining, shorten the remaining
         remaining[0] = overlap[1];
       } else {
-        // If a union splits 'a' in two, add a new range to the list
+        // If a overlap splits 'a' in two, add a new range to the list
         newRanges.push([remaining[0], overlap[0]]);
         remaining[0] = overlap[1];
       }
