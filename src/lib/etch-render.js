@@ -19,8 +19,8 @@ export class EtchRenderer {
     this.lineWidth = lineWidth;
     this.lineSpacing = lineSpacing;
     this.background = "white";
-    this.waveAmplitude = 0.5; // TODO
-    this.wavePeriod = 60;
+    this.defaultWaveAmplitude = 0.5; // TODO
+    this.defaultWavePeriod = 60;
 
     // Random number generation
     this.seed = 10; // TODO: Use a random or provided seed
@@ -207,13 +207,6 @@ export class EtchRenderer {
     for (let i = 0; i < line.segments.length; i++) {
       const segment = line.segments[i];
 
-      let colour;
-      if (segment.isBackground) {
-        colour = this.background;
-      } else {
-        colour = this.layers[segment.layerId].fill;
-      }
-
       // Check for right-padding in the left neighbour
       // This would be implemented by shifting the left point of this segment
       let startXOffset = 0;
@@ -243,12 +236,21 @@ export class EtchRenderer {
 
       if (actualEndX <= actualStartX) continue;
 
-      this.drawSegment(actualStartX, actualEndX, line.y, colour);
+      const colour = this.getColourOfSegment(segment);
+
+      this.drawSegment(
+        actualStartX,
+        actualEndX,
+        line.y,
+        colour,
+        segment.layerId,
+      );
     }
   }
 
-  drawSegment(x1, x2, y, colour) {
-    let yOffset = this.getWaveYOffset(x1);
+  drawSegment(x1, x2, y, colour, layerId) {
+    // TODO: The arguments are a bit strange here
+    let yOffset = this.getWaveYOffset(x1, layerId);
     this.context.beginPath();
     this.context.moveTo(x1, y + yOffset);
 
@@ -257,13 +259,14 @@ export class EtchRenderer {
     while (currentX < x2) {
       if (currentX > x1) {
         // Don't moveTo and lineTo the first point
-        yOffset = this.getWaveYOffset(currentX);
+        yOffset = this.getWaveYOffset(currentX, layerId);
 
         // Draw the current line section
         if (this.random() > EtchRenderer.PROB_LINE_BREAK) {
           this.context.lineTo(currentX, y + yOffset);
           this.context.lineWidth = this.lineWidth;
           this.context.strokeStyle = this.addLightnessNoise(colour);
+          //this.context.lineCap = "round";
           this.context.stroke();
         }
 
@@ -282,13 +285,25 @@ export class EtchRenderer {
     }
 
     // Draw the final point
-    yOffset = this.getWaveYOffset(x2);
+    yOffset = this.getWaveYOffset(x2, layerId);
     this.context.lineTo(x2, y + yOffset);
 
     // Add the line to the canvas
     this.context.lineWidth = this.lineWidth;
     this.context.strokeStyle = this.addLightnessNoise(colour);
+    //this.context.lineCap = "round";
     this.context.stroke();
+  }
+
+  getColourOfSegment(segment) {
+    let colour;
+    if (segment.isBackground) {
+      colour = this.background;
+    } else {
+      colour = this.layers[segment.layerId].fill;
+    }
+
+    return colour;
   }
 
   addLightnessNoise(colour) {
@@ -404,9 +419,19 @@ export class EtchRenderer {
     return verticalLines;
   }
 
-  getWaveYOffset(x) {
+  getWaveYOffset(x, layerId) {
     // Returns the y-offset to be applied at the specified x
     // To add the wave defined by wavePeriod and waveAmplitude
-    return Math.sin((x * 2 * Math.PI) / this.wavePeriod) * this.waveAmplitude;
+    let wavePeriod = this.defaultWavePeriod;
+    let waveAmplitude = this.defaultWaveAmplitude;
+
+    if (layerId) {
+      console.log("here");
+      // Check whether custom wave parameters exist for this layer
+      wavePeriod = this.layers[layerId].wavePeriod || wavePeriod;
+      waveAmplitude = this.layers[layerId].waveAmplitude || waveAmplitude;
+    }
+
+    return Math.sin((x * 2 * Math.PI) / wavePeriod) * waveAmplitude;
   }
 }

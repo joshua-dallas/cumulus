@@ -107,6 +107,8 @@ export class Cumulus extends HTMLElement {
       rightPadding: 7,
       leftPadding: 0,
       specialType: "cloud-cell",
+      waveAmplitude: 0.75,
+      wavePeriod: 30,
     });
   }
 
