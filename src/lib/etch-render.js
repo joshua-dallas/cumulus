@@ -8,8 +8,9 @@ import { intersection, mulberry32, subtractRange } from "./utils";
 // TODO: Colour noise!! (brightness along line)
 
 export class EtchRenderer {
-  static DRAW_STEP = 5;
-  static LIGHTNESS_NOISE_RANGE = 5;
+  static DRAW_STEP = 2;
+  static LIGHTNESS_NOISE_RANGE = 13;
+  static PROB_LINE_BREAK = 0.0007;
 
   constructor(canvas, lineWidth = 2, lineSpacing = 2) {
     this.canvas = canvas;
@@ -257,7 +258,18 @@ export class EtchRenderer {
       if (currentX > x1) {
         // Don't moveTo and lineTo the first point
         yOffset = this.getWaveYOffset(currentX);
-        this.context.lineTo(currentX, y + yOffset);
+
+        // Draw the current line section
+        if (this.random() > EtchRenderer.PROB_LINE_BREAK) {
+          this.context.lineTo(currentX, y + yOffset);
+          this.context.lineWidth = this.lineWidth;
+          this.context.strokeStyle = this.addLightnessNoise(colour);
+          this.context.stroke();
+        }
+
+        // Setup for the next line
+        this.context.beginPath();
+        this.context.moveTo(currentX, y + yOffset);
       }
 
       // Quantise the x locations
@@ -275,8 +287,16 @@ export class EtchRenderer {
 
     // Add the line to the canvas
     this.context.lineWidth = this.lineWidth;
-    this.context.strokeStyle = `hsl(${colour.hue}, ${colour.sat}%, ${colour.light}%) `;
+    this.context.strokeStyle = this.addLightnessNoise(colour);
     this.context.stroke();
+  }
+
+  addLightnessNoise(colour) {
+    const lightnessNoise = Math.round(
+      (this.random() - 0.5) * EtchRenderer.LIGHTNESS_NOISE_RANGE,
+    );
+    const light = Math.min(Math.max(colour.light + lightnessNoise, 0), 100);
+    return `hsl(${colour.hue}, ${colour.sat}%, ${light}%)`;
   }
 
   getAffectedLines(startY, endY) {
