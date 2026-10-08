@@ -4,8 +4,13 @@ import { intersection, mulberry32, subtractRange } from "./utils";
 // TODO: Resize based on dpr
 // TODO: Use typescript and custom types for layer, line and segment
 // TODO: Should I use get/set patterns to trigger re-render?
+// TODO: Persist noise information between re-adding layers
+// TODO: Colour noise!! (brightness along line)
 
 export class EtchRenderer {
+  static DRAW_STEP = 5;
+  static LIGHTNESS_NOISE_RANGE = 5;
+
   constructor(canvas, lineWidth = 2, lineSpacing = 2) {
     this.canvas = canvas;
 
@@ -13,20 +18,37 @@ export class EtchRenderer {
     this.lineWidth = lineWidth;
     this.lineSpacing = lineSpacing;
     this.background = "white";
-    this.waveAmplitude = 5; // TODO
-    this.wavePeriod = 20;
+    this.waveAmplitude = 0.5; // TODO
+    this.wavePeriod = 60;
 
     // Random number generation
     this.seed = 10; // TODO: Use a random or provided seed
     this.random = mulberry32(this.seed);
+    this.edgeNoiseTable = [];
 
     // Get the canvas context
     this.context = canvas.getContext("2d");
     if (!this.context) throw new Error("Failed to get 2D context from canvas");
+    this.resize();
 
     // Initialise variables for storing the layers and rendered lines
     this.layers = [];
     this.generateLines();
+  }
+
+  resize() {
+    // TODO: Should this be handled in cumulus?
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio;
+
+    // Scale for pixel perfect rendering
+    this.canvas.width = rect.width * dpr;
+    this.canvas.height = rect.height * dpr;
+    this.context.scale(dpr, dpr);
+
+    // Set the 'drawn' size of the canvas
+    this.canvas.style.width = `${rect.width}px`;
+    this.canvas.style.height = `${rect.height}px`;
   }
 
   generateLines() {
@@ -72,11 +94,13 @@ export class EtchRenderer {
       const sqrtTerm = Math.round(
         Math.sqrt(config.radius ** 2 - (line.y - config.y) ** 2),
       );
-      const startX = config.x - sqrtTerm;
-      const endX = config.x + sqrtTerm;
+      let startX = config.x - sqrtTerm;
+      let endX = config.x + sqrtTerm;
+
+      [startX, endX] = this.addEdgeNoise(startX, endX, layerId, line.id);
 
       // Don't add a zero length segment
-      if (startX == endX) continue;
+      if (startX >= endX) continue;
 
       this.addSegment(line.id, startX, endX, layerId, false);
     }
@@ -110,14 +134,60 @@ export class EtchRenderer {
       // calculate the segment to add
       let range = verticalCrossings.map((vert) => vert.x);
       range.sort((a, b) => a - b);
-      const startX = range[0];
-      const endX = range[1];
+      let startX = range[0];
+      let endX = range[1];
+
+      [startX, endX] = this.addEdgeNoise(startX, endX, layerId, line.id);
 
       // Don't add a zero length segment
-      if (startX == endX) continue;
+      if (startX >= endX) continue;
 
       this.addSegment(line.id, startX, endX, layerId, false);
     }
+  }
+
+  addEdgeNoise(startX, endX, layerId, lineId) {
+    const leftEdgeNoise = this.layers[layerId].leftEdgeNoise;
+    const rightEdgeNoise = this.layers[layerId].rightEdgeNoise;
+    if (leftEdgeNoise) {
+      // Check whether we have a previous left edge noise value on this line
+      const cachedValue = this.edgeNoiseTable.filter(
+        (v) => v.layerId == layerId && v.lineId == lineId && v.edge == "left",
+      );
+      if (cachedValue.length) {
+        startX += cachedValue[0].offset;
+      } else {
+        const offset = Math.round((this.random() - 0.5) * leftEdgeNoise);
+        startX += offset;
+        this.edgeNoiseTable.push({
+          layerId,
+          lineId,
+          edge: "left",
+          offset,
+        });
+      }
+    }
+
+    if (rightEdgeNoise) {
+      // Check whether we have a previous right edge noise value on this line
+      const cachedValue = this.edgeNoiseTable.filter(
+        (v) => v.layerId == layerId && v.lineId == lineId && v.edge == "right",
+      );
+      if (cachedValue.length) {
+        endX += cachedValue[0].offset;
+      } else {
+        const offset = Math.round((this.random() - 0.5) * rightEdgeNoise);
+        endX += offset;
+        this.edgeNoiseTable.push({
+          layerId,
+          lineId,
+          edge: "right",
+          offset,
+        });
+      }
+    }
+
+    return [startX, endX];
   }
 
   draw() {
@@ -132,6 +202,7 @@ export class EtchRenderer {
 
   drawLine(line) {
     // For each final segment, draw a line to the canvas
+    // TODO: Create helper functions for get colour, get offset left, right
     for (let i = 0; i < line.segments.length; i++) {
       const segment = line.segments[i];
 
@@ -166,14 +237,46 @@ export class EtchRenderer {
         }
       }
 
-      this.context.beginPath();
-      this.context.moveTo(segment.startX + startXOffset, line.y);
-      this.context.lineTo(segment.endX - endXOffset, line.y);
-      this.context.lineWidth = this.lineWidth;
-      this.context.strokeStyle = colour;
-      // TODO: All the other styling
-      this.context.stroke();
+      const actualStartX = segment.startX + startXOffset;
+      const actualEndX = segment.endX - endXOffset;
+
+      if (actualEndX <= actualStartX) continue;
+
+      this.drawSegment(actualStartX, actualEndX, line.y, colour);
     }
+  }
+
+  drawSegment(x1, x2, y, colour) {
+    let yOffset = this.getWaveYOffset(x1);
+    this.context.beginPath();
+    this.context.moveTo(x1, y + yOffset);
+
+    // We draw each segment as a waved line
+    let currentX = x1;
+    while (currentX < x2) {
+      if (currentX > x1) {
+        // Don't moveTo and lineTo the first point
+        yOffset = this.getWaveYOffset(currentX);
+        this.context.lineTo(currentX, y + yOffset);
+      }
+
+      // Quantise the x locations
+      const mod = currentX % EtchRenderer.DRAW_STEP;
+      if (mod == 0) {
+        currentX += EtchRenderer.DRAW_STEP;
+      } else {
+        currentX += EtchRenderer.DRAW_STEP - mod;
+      }
+    }
+
+    // Draw the final point
+    yOffset = this.getWaveYOffset(x2);
+    this.context.lineTo(x2, y + yOffset);
+
+    // Add the line to the canvas
+    this.context.lineWidth = this.lineWidth;
+    this.context.strokeStyle = `hsl(${colour.hue}, ${colour.sat}%, ${colour.light}%) `;
+    this.context.stroke();
   }
 
   getAffectedLines(startY, endY) {
@@ -181,7 +284,6 @@ export class EtchRenderer {
   }
 
   addSegment(lineId, startX, endX, layerId, isBackground) {
-    // TODO: Add parametres for the noise, etc.
     let segments = this.lines[lineId].segments;
 
     // If there are no segments already for this line, add this one
@@ -225,10 +327,6 @@ export class EtchRenderer {
           existingSegment.endX = newRanges[0][1];
         } else if (newRanges.length == 2) {
           // The new segment splits the existing segment in two
-          // Update the range of the existing segment (the left)
-          existingSegment.startX = newRanges[0][0];
-          existingSegment.endX = newRanges[0][1];
-          existingSegment.rightCoveredByLayer = true;
           // Create a new segment for the other section of the existing segment (the right)
           segmentsToAdd.push({
             ...existingSegment,
@@ -236,9 +334,13 @@ export class EtchRenderer {
             endX: newRanges[1][1],
             leftCoveredByLayer: true,
           });
+          // Update the range of the existing segment (the left)
+          existingSegment.startX = newRanges[0][0];
+          existingSegment.endX = newRanges[0][1];
+          existingSegment.rightCoveredByLayer = true;
         }
       }
-      // TODO: Early exit once we are out of the specified range
+      // TODO: Early exit once we are out of the segment range
       // I.e. if the endX of the existing segment is greater than the endX of the new segment, stop
     }
 
@@ -251,16 +353,6 @@ export class EtchRenderer {
     // Now add the new segments into list
     segmentsToAdd.push({ startX, endX, layerId, isBackground });
     for (const newSegment of segmentsToAdd) {
-      if (newSegment.startX == newSegment.endX) {
-        throw new Error(
-          `Do not add an empty segment ${JSON.stringify(newSegment, 0, 2)} ${lineId}`,
-        );
-      }
-      if (newSegment.startX > newSegment.endX) {
-        throw new Error(
-          `Start must be before end ${JSON.stringify(newSegment, 0, 2)} ${lineId}`,
-        );
-      }
       segments.push(newSegment);
     }
     // Sort by location along the line
@@ -290,5 +382,11 @@ export class EtchRenderer {
     }
 
     return verticalLines;
+  }
+
+  getWaveYOffset(x) {
+    // Returns the y-offset to be applied at the specified x
+    // To add the wave defined by wavePeriod and waveAmplitude
+    return Math.sin((x * 2 * Math.PI) / this.wavePeriod) * this.waveAmplitude;
   }
 }

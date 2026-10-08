@@ -13,7 +13,7 @@ export class Cumulus extends HTMLElement {
     const height = Number(this.getAttribute("height")) || 500;
     const numCells = Number(this.getAttribute("numCells")) || 10;
     const seed = Number(this.getAttribute("seed")) || 42; // TODO: randomize seed if not provided
-    const lineWidth = Number(this.getAttribute("lineWidth")) || 2;
+    const lineWidth = Number(this.getAttribute("lineWidth")) || 1;
     const lineSpacing = Number(this.getAttribute("lineWidth")) || 2;
 
     // Initialise the cloud builder and generate the starting cells
@@ -25,13 +25,23 @@ export class Cumulus extends HTMLElement {
 
     const shadow = this.attachShadow({ mode: "open" });
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    canvas.style.height = `${height}px`;
+    canvas.style.width = `${width}px`;
+    //canvas.width = width;
+    //canvas.height = height;
     shadow.append(canvas);
+
+    // Define the shade colours
+    // TODO: Define as consts outside of connectedCallback
+    this.background = { hue: 181, sat: 44, light: 74 };
+    this.light = { hue: 0, sat: 0, light: 100 };
+    this.mid = { hue: 0, sat: 0, light: 75 };
+    this.dark = { hue: 0, sat: 0, light: 50 };
+    this.dark2 = { hue: 0, sat: 0, light: 30 };
 
     // Set up the renderer
     this.renderer = new EtchRenderer(canvas, lineWidth, lineSpacing);
-    this.renderer.setBackground("rgba(220, 239, 247, 1)");
+    this.renderer.setBackground(this.background);
     //this.renderer.setBackgroundPadding()
     //this.renderer.setBackgroundMask()
     //this.renderer.setBackgroundBoxNoise({leftVert, rightVert, topHor, bottomHor})
@@ -44,8 +54,8 @@ export class Cumulus extends HTMLElement {
 
     // Add the layers
     this.addFillCircleLayers(this.cloudBuilder.fillCircles);
-    this.addCloudInnerLayer(this.cloudBuilder.cloudInnerLeft);
-    this.addCloudInnerLayer(this.cloudBuilder.cloudInnerRight);
+    this.addCloudInnerLeftLayer(this.cloudBuilder.cloudInnerLeft);
+    this.addCloudInnerRightLayer(this.cloudBuilder.cloudInnerRight);
     this.addCloudCellLayers(this.cloudBuilder.cells);
 
     this.renderer.draw();
@@ -91,11 +101,11 @@ export class Cumulus extends HTMLElement {
       x: cell.x,
       y: cell.y,
       radius: cell.radius,
-      fill: "grey",
-      rightEdgeNoise: 10, // Plus or minus this many pixels
-      leftEdgeNoise: 10,
-      rightPadding: 5,
-      leftPadding: 1,
+      fill: this.mid,
+      rightEdgeNoise: 7, // Plus or minus this many pixels
+      leftEdgeNoise: 3,
+      rightPadding: 7,
+      leftPadding: 0,
       specialType: "cloud-cell",
     });
   }
@@ -105,20 +115,32 @@ export class Cumulus extends HTMLElement {
       x: circle.x,
       y: circle.y,
       radius: circle.radius,
-      fill: "lightgrey",
-      rightEdgeNoise: 10,
-      leftEdgeNoise: 10,
+      fill: this.dark,
+      rightEdgeNoise: 2,
+      leftEdgeNoise: 2,
       leftPadding: 0,
       rightPadding: 0,
     });
   }
 
-  addCloudInnerLayer(inner) {
+  addCloudInnerRightLayer(inner) {
     this.renderer.addRightAnglePolygonLayer({
       vertices: inner,
-      fill: "lightgrey",
-      rightEdgeNoise: 10,
-      leftEdgeNoise: 10,
+      fill: this.dark,
+      rightEdgeNoise: 5,
+      leftEdgeNoise: 0,
+      leftPadding: 0,
+      rightPadding: 0,
+      // TODO: Top and bottom noise
+    });
+  }
+
+  addCloudInnerLeftLayer(inner) {
+    this.renderer.addRightAnglePolygonLayer({
+      vertices: inner,
+      fill: this.dark,
+      rightEdgeNoise: 0,
+      leftEdgeNoise: 5,
       leftPadding: 0,
       rightPadding: 0,
       // TODO: Top and bottom noise
@@ -132,7 +154,7 @@ export class Cumulus extends HTMLElement {
   }
 
   addFillCircleLayers(circles) {
-    for (const circle in circles) {
+    for (const circle of circles) {
       this.addFillCircleLayer(circle);
     }
   }

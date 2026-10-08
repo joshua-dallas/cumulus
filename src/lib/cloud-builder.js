@@ -7,6 +7,7 @@ export class CloudBuilder {
   static MAX_CELL_RADIUS = 0.22; // Maximum cell radius as a fraction of the dome radius
   // TODO: Add additional padding to allow for cells to grow and rise
   // TODO: Minimum base width for matched bottom cell?
+  // TODO: Child stepped down cells
 
   constructor(width = 500, height = 500, numCells = 10, seed = 42) {
     this.random = mulberry32(seed);
