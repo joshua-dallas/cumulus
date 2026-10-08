@@ -33,7 +33,7 @@ export class Cumulus extends HTMLElement {
 
     // Define the shade colours
     // TODO: Define as consts outside of connectedCallback
-    this.background = { hue: 181, sat: 44, light: 74 };
+    this.background = { hue: 181, sat: 44, light: 75 };
     this.light = { hue: 0, sat: 0, light: 100 };
     this.mid = { hue: 0, sat: 0, light: 75 };
     this.dark = { hue: 0, sat: 0, light: 50 };
@@ -107,7 +107,7 @@ export class Cumulus extends HTMLElement {
       rightPadding: 7,
       leftPadding: 0,
       specialType: "cloud-cell",
-      waveAmplitude: 0.75,
+      waveAmplitude: 0.6,
       wavePeriod: 30,
     });
   }

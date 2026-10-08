@@ -10,7 +10,10 @@ import { intersection, mulberry32, subtractRange } from "./utils";
 export class EtchRenderer {
   static DRAW_STEP = 2;
   static LIGHTNESS_NOISE_RANGE = 13;
-  static PROB_LINE_BREAK = 0.0007;
+  static PROB_LINE_BREAK = 0.0009;
+  static WAVE_X_NOISE_RANGE = 6;
+  static LINE_Y_NOISE_RANGE = 0.4;
+  static LINE_WIDTH_NOISE_RANGE = 0.3;
 
   constructor(canvas, lineWidth = 2, lineSpacing = 2) {
     this.canvas = canvas;
@@ -263,8 +266,10 @@ export class EtchRenderer {
 
         // Draw the current line section
         if (this.random() > EtchRenderer.PROB_LINE_BREAK) {
+          const lineWidthNoise =
+            (this.random() - 0.5) * EtchRenderer.LINE_WIDTH_NOISE_RANGE;
           this.context.lineTo(currentX, y + yOffset);
-          this.context.lineWidth = this.lineWidth;
+          this.context.lineWidth = this.lineWidth + lineWidthNoise;
           this.context.strokeStyle = this.addLightnessNoise(colour);
           //this.context.lineCap = "round";
           this.context.stroke();
@@ -426,12 +431,21 @@ export class EtchRenderer {
     let waveAmplitude = this.defaultWaveAmplitude;
 
     if (layerId) {
-      console.log("here");
       // Check whether custom wave parameters exist for this layer
       wavePeriod = this.layers[layerId].wavePeriod || wavePeriod;
       waveAmplitude = this.layers[layerId].waveAmplitude || waveAmplitude;
     }
 
-    return Math.sin((x * 2 * Math.PI) / wavePeriod) * waveAmplitude;
+    // TODO: Should this be uniform for the whole line?
+    // Add some noise that shifts the waves left or right
+    // This does not change the start or end x values of the line segment
+    const waveXNoise = (this.random() - 0.5) * EtchRenderer.WAVE_X_NOISE_RANGE;
+    // TODO: Make this smoother - i.e. continious noise would be better. Same goes for edge noise
+    const yNoise = (this.random() - 0.5) * EtchRenderer.LINE_Y_NOISE_RANGE;
+
+    return (
+      Math.sin(((x + waveXNoise) * 2 * Math.PI) / wavePeriod) * waveAmplitude +
+      yNoise
+    );
   }
 }
