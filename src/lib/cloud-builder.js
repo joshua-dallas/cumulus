@@ -34,7 +34,7 @@ export class CloudBuilder {
 
     this.generateCells(Math.min(numCells, CloudBuilder.MAX_CELLS));
     this.matchBottomCell();
-    //this.sortBySize(); //TODO
+    this.sortBySize();
     this.addExtensionLines();
     this.fillInnerGaps();
     this.createCloudInner();
@@ -338,6 +338,12 @@ export class CloudBuilder {
         radius,
       });
     }
+  }
+
+  sortBySize() {
+    // Sort the cells by size such that the smallest cells are last
+    // Therefore, smaller cells will be drawn on top of larger cells
+    this.cells.sort((a, b) => b.radius - a.radius);
   }
 
   randomCellRadius() {

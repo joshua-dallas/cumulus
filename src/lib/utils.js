@@ -40,7 +40,7 @@ export function subtractRange(a, b) {
 
   const overlap = intersection(a, b);
   if (overlap) {
-    if (overlap == a) {
+    if (overlap[0] == a[0] && overlap[1] == a[1]) {
       // The entire range a was intersected by b
       return [];
     } else if (overlap[0] == a[0]) {

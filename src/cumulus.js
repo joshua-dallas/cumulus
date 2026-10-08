@@ -29,6 +29,7 @@ export class Cumulus extends HTMLElement {
     canvas.height = height;
     shadow.append(canvas);
 
+    // Set up the renderer
     this.renderer = new EtchRenderer(canvas, lineWidth, lineSpacing);
     this.renderer.setBackground("rgba(220, 239, 247, 1)");
     //this.renderer.setBackgroundPadding()
@@ -40,50 +41,13 @@ export class Cumulus extends HTMLElement {
     //this.renderer.setLineEndShape() // flat, rounded
     //this.renderer.setBorderLinesEndShape() // tapered, rounded, noise on length, occassional dot at the end
     //this.renderer.addLayer(json)
-    /*this.renderer.addCircleLayer({
-      x: 300,
-      y: 200,
-      radius: 50,
-      fill: "blue",
-      rhsLenNoise: 10,
-      lhsLenNoise: 10,
-      lhsLinePadding: 5,
-      rhsLinePadding: 5,
-      specialType: "cloud-cell",
-    });*/
-    for (const fillCircle of this.cloudBuilder.fillCircles) {
-      this.renderer.addCircleLayer({
-        x: fillCircle.x,
-        y: fillCircle.y,
-        radius: fillCircle.radius,
-        fill: "lightgrey",
-        rhsLenNoise: 10,
-        lhsLenNoise: 10,
-        lhsLinePadding: 5,
-        rhsLinePadding: 5,
-      });
-    }
-    this.renderer.addRightAnglePolygonLayer({
-      vertices: this.cloudBuilder.cloudInnerRight,
-      fill: "lightgrey",
-      rhsLenNoise: 10,
-      lhsLenNoise: 10,
-      lhsLinePadding: 5,
-      rhsLinePadding: 5,
-      // TODO: Top and bottom noise
-    });
-    this.renderer.addRightAnglePolygonLayer({
-      vertices: this.cloudBuilder.cloudInnerLeft,
-      fill: "lightgrey",
-      rhsLenNoise: 10,
-      lhsLenNoise: 10,
-      lhsLinePadding: 5,
-      rhsLinePadding: 5,
-      // TODO: Top and bottom noise
-    });
 
+    // Add the layers
+    this.addFillCircleLayers(this.cloudBuilder.fillCircles);
+    this.addCloudInnerLayer(this.cloudBuilder.cloudInnerLeft);
+    this.addCloudInnerLayer(this.cloudBuilder.cloudInnerRight);
     this.addCloudCellLayers(this.cloudBuilder.cells);
-    this.addCloudCellLayers(this.cloudBuilder.cells);
+
     this.renderer.draw();
 
     //this.renderer.renderCells(this.cloudBuilder.cells);
@@ -128,11 +92,36 @@ export class Cumulus extends HTMLElement {
       y: cell.y,
       radius: cell.radius,
       fill: "grey",
-      rhsLenNoise: 10,
-      lhsLenNoise: 10,
-      lhsLinePadding: 5,
-      rhsLinePadding: 5,
+      rightEdgeNoise: 10, // Plus or minus this many pixels
+      leftEdgeNoise: 10,
+      rightPadding: 5,
+      leftPadding: 1,
       specialType: "cloud-cell",
+    });
+  }
+
+  addFillCircleLayer(circle) {
+    this.renderer.addCircleLayer({
+      x: circle.x,
+      y: circle.y,
+      radius: circle.radius,
+      fill: "lightgrey",
+      rightEdgeNoise: 10,
+      leftEdgeNoise: 10,
+      leftPadding: 0,
+      rightPadding: 0,
+    });
+  }
+
+  addCloudInnerLayer(inner) {
+    this.renderer.addRightAnglePolygonLayer({
+      vertices: inner,
+      fill: "lightgrey",
+      rightEdgeNoise: 10,
+      leftEdgeNoise: 10,
+      leftPadding: 0,
+      rightPadding: 0,
+      // TODO: Top and bottom noise
     });
   }
 
@@ -140,5 +129,57 @@ export class Cumulus extends HTMLElement {
     for (const cell of cells) {
       this.addCloudCellLayer(cell);
     }
+  }
+
+  addFillCircleLayers(circles) {
+    for (const circle in circles) {
+      this.addFillCircleLayer(circle);
+    }
+  }
+
+  //----------------------------------------------------//
+
+  renderCell(cell, showNumbers = false) {
+    this.context.beginPath();
+    this.context.arc(cell.x, cell.y, cell.radius, 0, 2 * Math.PI);
+    this.context.fillStyle = "lightblue";
+    this.context.fill();
+    this.context.beginPath();
+    this.context.arc(cell.x, cell.y, cell.radius, 1.5 * Math.PI, 0.5 * Math.PI);
+    this.context.strokeStyle = "blue";
+    this.context.lineWidth = 1;
+    this.context.stroke();
+
+    if (showNumbers) {
+      this.context.save();
+      this.context.fillStyle = "blue";
+      this.context.font = `${Math.max(10, cell.radius * 0.5)}px sans-serif`;
+      this.context.textAlign = "center";
+      this.context.textBaseline = "middle";
+      this.context.fillText(String(cell.id), cell.x, cell.y);
+      this.context.restore();
+    }
+  }
+
+  renderCells(cells) {
+    for (const cell of cells) {
+      this.renderCell(cell);
+    }
+  }
+
+  renderPolygon(polygon) {
+    if (!polygon || polygon.length === 0) return;
+
+    this.context.beginPath();
+    this.context.moveTo(polygon[0].x, polygon[0].y);
+    for (let i = 1; i < polygon.length; i++) {
+      this.context.lineTo(polygon[i].x, polygon[i].y);
+    }
+    this.context.closePath();
+    this.context.fillStyle = "rgba(190, 216, 230, 0.4)"; // Light blue with transparency
+    this.context.fill();
+    //this.context.strokeStyle = "blue";
+    //this.context.lineWidth = 1;
+    //this.context.stroke();
   }
 }
