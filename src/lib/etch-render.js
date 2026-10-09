@@ -11,11 +11,8 @@ import {
 // TODO: Persist noise information between re-adding layers
 // TODO: Improve noise behaviour (continious), x wave per line
 // TODO: Line width gradient down background
-// TODO: Implement the shadow diagonal
 // TODO: Padding noise?
 // TODO: Higher prob of line breaks (and longer ones) in first and last line
-// TODO: Rewrite with forEach and map where possible
-// TODO: #1 Add darker shading somehow - shadow diagonal, bottom shadow, lhs or middle of some cloud cells, etc.
 
 export class EtchRenderer {
   static DRAW_STEP = 2;
@@ -34,6 +31,8 @@ export class EtchRenderer {
     this.lineSpacing = lineSpacing;
     this.background = "white";
     this.backgroundBorderNoise = 0;
+    // How much thicker the background lines are at the bottom compared to the top
+    this.backgroundLineWidthGradientDown = 0.4; // TODO: Specify thicker lines at the top, perhaps another variable
     this.defaultWaveAmplitude = 0.5;
     this.defaultWavePeriod = 60;
 
@@ -54,6 +53,18 @@ export class EtchRenderer {
     this.seed = 10; // TODO: Use a random or provided seed
     this.random = mulberry32(this.seed);
     this.edgeNoiseTable = [];
+    this.noise = {
+      layerEdge: [],
+      shadowDiagonalEdge: [],
+      yOffset: [], // TODO: When dealing with unquantised locations, use floor
+      xWaveOffset: [],
+      //xWavePeriod: [],
+      lineBreaks: [],
+      brightness: [],
+      lineWidth: [],
+      backgroundEdgeLeft: [],
+      backgroundEdgeRight: [],
+    };
 
     // Get the canvas context
     this.context = canvas.getContext("2d");
@@ -280,11 +291,9 @@ export class EtchRenderer {
     const shadowPaddingFactor = 0.4; // How much to attenuate padding in the shadow region TODO: move to top
 
     // For each final segment, draw a line to the canvas
-    // TODO: Create helper functions for get colour, get offset left, right
     for (let i = 0; i < line.segments.length; i++) {
       const segment = line.segments[i];
 
-      // TODO: Don't apply padding within the shadow region
       // Check for right-padding in the left neighbour
       // This would be implemented by shifting the left point of this segment
       let startXOffset = this.getStartXOffsetFromPadding(i, line);
@@ -309,14 +318,8 @@ export class EtchRenderer {
   }
 
   drawSegment(x1, x2, line, segment) {
-    // TODO: The arguments are a bit strange here, refactor
-
-    // Get the custom line width of the layer
-    const layer = this.layers[segment.layerId] || undefined;
-    const lineWidth = layer?.lineWidth || this.defaultLineWidth;
-
     // Set up to draw the first point of the line
-    let yOffset = this.getWaveYOffset(x1, layer);
+    let yOffset = this.getWaveYOffset(x1, segment);
     this.context.beginPath();
     this.context.moveTo(x1, line.y + yOffset);
 
@@ -325,23 +328,20 @@ export class EtchRenderer {
     while (currentX < x2) {
       // Don't moveTo and lineTo the first point
       if (currentX > x1) {
+        // Get the parameters for the next line section
+        const [colour, lineWidth, lineBreak] = this.getStrokeParameters(
+          x1,
+          segment,
+          line,
+        );
+        yOffset = this.getWaveYOffset(currentX, segment);
+
         // Draw the current line section
-        yOffset = this.getWaveYOffset(currentX, layer);
 
-        // Decide whether to add a line break at the current point
-        // TODO: More line breaks in the background?
-        //TODO: Pull from table
-        if (this.random() > EtchRenderer.PROB_LINE_BREAK) {
-          const lineWidthNoise =
-            (this.random() - 0.5) * EtchRenderer.LINE_WIDTH_NOISE_RANGE;
-
+        if (!lineBreak) {
           this.context.lineTo(currentX, line.y + yOffset);
-          this.context.lineWidth = lineWidth + lineWidthNoise;
-          this.context.strokeStyle = this.getStrokeColour(
-            currentX,
-            segment,
-            line,
-          );
+          this.context.lineWidth = lineWidth;
+          this.context.strokeStyle = colour;
           //this.context.lineCap = "round";
           this.context.stroke();
         }
@@ -360,19 +360,48 @@ export class EtchRenderer {
       }
     }
 
-    // Draw the final point
-    yOffset = this.getWaveYOffset(x2, layer);
-    this.context.lineTo(x2, line.y + yOffset);
+    // Get the parameters for the final line section
+    yOffset = this.getWaveYOffset(x2, segment);
+    const [colour, lineWidth, lineBreak] = this.getStrokeParameters(
+      x1,
+      segment,
+      line,
+    );
 
-    // Add the line to the canvas
+    if (lineBreak) return;
+
+    // Draw the final point
+    this.context.lineTo(x2, line.y + yOffset);
     this.context.lineWidth = lineWidth;
-    this.context.strokeStyle = this.getStrokeColour(currentX, segment, line);
+    this.context.strokeStyle = colour;
     //this.context.lineCap = "round";
     this.context.stroke();
   }
 
   getStrokeParameters(x1, segment, line) {
-    return this.getStrokeColour(x1, segment, line);
+    //TODO: Pull from tables
+    // Get the final colour of the section
+    const colour = this.getStrokeColour(x1, segment, line);
+
+    // Get the custom line width of the layer
+    const layer = this.layers[segment.layerId] || undefined;
+    let lineWidth = layer?.lineWidth || this.defaultLineWidth;
+    const lineWidthNoise =
+      (this.random() - 0.5) * EtchRenderer.LINE_WIDTH_NOISE_RANGE;
+    lineWidth += lineWidthNoise;
+    if (segment.isBackground) {
+      // Apply the background line width gradient
+      lineWidth *=
+        ((line.id + 1) / this.lines.length) *
+          (this.backgroundLineWidthGradientDown - 1) +
+        1;
+    }
+
+    // Decide whether to add a line break at the current point
+    // TODO: More line breaks in the background?
+    const lineBreak = this.random() < EtchRenderer.PROB_LINE_BREAK;
+
+    return [colour, lineWidth, lineBreak];
   }
 
   getStartXOffsetFromPadding(segmentId, line) {
@@ -556,11 +585,13 @@ export class EtchRenderer {
     segments.sort((a, b) => a.startX - b.startX);
   }
 
-  getWaveYOffset(x, layer) {
+  getWaveYOffset(x, segment) {
     // Returns the y-offset to be applied at the specified x
     // To add the wave defined by wavePeriod and waveAmplitude
     let wavePeriod = this.defaultWavePeriod;
     let waveAmplitude = this.defaultWaveAmplitude;
+
+    const layer = this.layers[segment.layerId] || undefined;
 
     if (layer) {
       // Check whether custom wave parameters exist for this layer

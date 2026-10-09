@@ -34,7 +34,7 @@ export class Cumulus extends HTMLElement {
 
     // Define the shade colours
     // TODO: Define as consts outside of connectedCallback
-    this.background = { hue: 206, sat: 57, light: 70 };
+    this.background = { hue: 206, sat: 57, light: 60 };
     this.light = { hue: 0, sat: 0, light: 100 };
     this.mid = { hue: 0, sat: 0, light: 75 };
     this.dark = { hue: 0, sat: 0, light: 50 };
