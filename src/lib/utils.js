@@ -90,3 +90,55 @@ export function subtractRanges(a, listB) {
 
   return newRanges;
 }
+
+export function getVerticalLinesOfPolygon(vertices) {
+  let verticalLines = [];
+
+  // Make a copy and duplicate the first point at the end to allow for
+  // The last line to be formed
+  let verticesCopy = [...vertices];
+  verticesCopy.push(vertices[0]);
+
+  for (let i = 1; i < verticesCopy.length; i++) {
+    if (
+      verticesCopy[i - 1].x == verticesCopy[i].x &&
+      verticesCopy[i - 1].y != verticesCopy[i].y
+    ) {
+      verticalLines.push({
+        x: verticesCopy[i].x,
+        y1: Math.min(verticesCopy[i - 1].y, verticesCopy[i].y),
+        y2: Math.max(verticesCopy[i - 1].y, verticesCopy[i].y),
+      });
+    }
+  }
+
+  return verticalLines;
+}
+
+export function getHorizontalLinesOfPolygon(vertices, verticesFilter) {
+  let horizontalLines = [];
+
+  // Make a copy and duplicate the first point at the end to allow for
+  // The last line to be formed
+  let verticesCopy = [...vertices];
+  verticesCopy.push(vertices[0]);
+
+  for (let i = 1; i < verticesCopy.length; i++) {
+    if (
+      verticesCopy[i - 1].y == verticesCopy[i].y &&
+      verticesCopy[i - 1].x != verticesCopy[i].x &&
+      (verticesFilter
+        ? verticesFilter(verticesCopy[i - 1], verticesCopy[i])
+        : true)
+    ) {
+      horizontalLines.push({
+        y: verticesCopy[i].y,
+        x1: Math.min(verticesCopy[i - 1].x, verticesCopy[i].x),
+        x2: Math.max(verticesCopy[i - 1].x, verticesCopy[i].x),
+        vertices: [verticesCopy[i - 1], verticesCopy[i]],
+      });
+    }
+  }
+
+  return horizontalLines;
+}

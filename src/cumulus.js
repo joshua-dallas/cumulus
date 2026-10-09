@@ -3,6 +3,7 @@ import { EtchRenderer } from "./lib/etch-render.js";
 
 // TODO: Watch for changes to attributes and re-render the cloud when they change
 // TODO: Implement pixel perfect resizing of the canvas when the element is resized
+// TODO: Sunset colour mode (animate the shadow diag)
 
 export class Cumulus extends HTMLElement {
   connectedCallback() {
@@ -33,14 +34,15 @@ export class Cumulus extends HTMLElement {
 
     // Define the shade colours
     // TODO: Define as consts outside of connectedCallback
-    this.background = { hue: 181, sat: 44, light: 75 };
+    this.background = { hue: 206, sat: 57, light: 70 };
     this.light = { hue: 0, sat: 0, light: 100 };
     this.mid = { hue: 0, sat: 0, light: 75 };
     this.dark = { hue: 0, sat: 0, light: 50 };
-    this.dark2 = { hue: 0, sat: 0, light: 30 };
+    this.dark2 = { hue: 0, sat: 0, light: 15 };
 
     // Set up the renderer
     this.renderer = new EtchRenderer(canvas, lineWidth, lineSpacing);
+    this.renderer.setBackgroundBorderNoise(3);
     this.renderer.setBackground(this.background);
     //this.renderer.setBackgroundPadding()
     //this.renderer.setBackgroundMask()
@@ -97,19 +99,61 @@ export class Cumulus extends HTMLElement {
   }
 
   addCloudCellLayer(cell) {
+    // Add the main cell first
     this.renderer.addCircleLayer({
       x: cell.x,
       y: cell.y,
       radius: cell.radius,
-      fill: this.mid,
-      rightEdgeNoise: 7, // Plus or minus this many pixels
-      leftEdgeNoise: 3,
-      rightPadding: 7,
+      fill: this.dark,
+      rightEdgeNoise: 4, // Plus or minus this many pixels
+      leftEdgeNoise: 7,
+      rightPadding: 3, // TODO: Try without
       leftPadding: 0,
+      lineWidth: 1.3,
       specialType: "cloud-cell",
       waveAmplitude: 0.6,
       wavePeriod: 30,
     });
+
+    // Then add all its associated fractal circles
+    const linkedDarkFractals = this.cloudBuilder.darkFractalCircles.filter(
+      (c) => c.linkedCell == cell.id,
+    );
+    for (const fractal of linkedDarkFractals) {
+      this.renderer.addCircleLayer({
+        x: fractal.x,
+        y: fractal.y,
+        radius: fractal.radius,
+        fill: this.dark2,
+        rightEdgeNoise: 2, // Plus or minus this many pixels
+        leftEdgeNoise: 4,
+        rightPadding: 0,
+        leftPadding: 0,
+        lineWidth: 1.4,
+        specialType: "dark-fractal",
+        waveAmplitude: 0.7,
+        wavePeriod: 30,
+      });
+    }
+
+    const linkedLightFractals = this.cloudBuilder.lightFractalCircles.filter(
+      (c) => c.linkedCell == cell.id,
+    );
+    for (const fractal of linkedLightFractals) {
+      this.renderer.addCircleLayer({
+        x: fractal.x,
+        y: fractal.y,
+        radius: fractal.radius,
+        fill: this.mid,
+        rightEdgeNoise: 4, // Plus or minus this many pixels
+        leftEdgeNoise: 4,
+        rightPadding: fractal.rightPadding,
+        leftPadding: 0,
+        specialType: "light-fractal",
+        waveAmplitude: 0.7,
+        wavePeriod: 30,
+      });
+    }
   }
 
   addFillCircleLayer(circle) {
@@ -118,8 +162,9 @@ export class Cumulus extends HTMLElement {
       y: circle.y,
       radius: circle.radius,
       fill: this.dark,
-      rightEdgeNoise: 2,
-      leftEdgeNoise: 2,
+      lineWidth: 1.3,
+      rightEdgeNoise: 6,
+      leftEdgeNoise: 6,
       leftPadding: 0,
       rightPadding: 0,
     });
@@ -129,6 +174,7 @@ export class Cumulus extends HTMLElement {
     this.renderer.addRightAnglePolygonLayer({
       vertices: inner,
       fill: this.dark,
+      lineWidth: 1.3,
       rightEdgeNoise: 5,
       leftEdgeNoise: 0,
       leftPadding: 0,
@@ -141,6 +187,7 @@ export class Cumulus extends HTMLElement {
     this.renderer.addRightAnglePolygonLayer({
       vertices: inner,
       fill: this.dark,
+      lineWidth: 1.3,
       rightEdgeNoise: 0,
       leftEdgeNoise: 5,
       leftPadding: 0,

@@ -1,11 +1,21 @@
-import { intersection, mulberry32, subtractRange } from "./utils";
+import {
+  getVerticalLinesOfPolygon,
+  intersection,
+  mulberry32,
+  subtractRange,
+} from "./utils";
 
 // TODO: Watch attribute and trigger re-render
-// TODO: Resize based on dpr
 // TODO: Use typescript and custom types for layer, line and segment
 // TODO: Should I use get/set patterns to trigger re-render?
 // TODO: Persist noise information between re-adding layers
-// TODO: Colour noise!! (brightness along line)
+// TODO: Improve noise behaviour (continious), x wave per line
+// TODO: Line width gradient down background
+// TODO: Implement the shadow diagonal
+// TODO: Padding noise?
+// TODO: Higher prob of line breaks (and longer ones) in first and last line
+// TODO: Rewrite with forEach and map where possible
+// TODO: #1 Add darker shading somehow - shadow diagonal, bottom shadow, lhs or middle of some cloud cells, etc.
 
 export class EtchRenderer {
   static DRAW_STEP = 2;
@@ -19,11 +29,26 @@ export class EtchRenderer {
     this.canvas = canvas;
 
     // Global styling variables
-    this.lineWidth = lineWidth;
+    // TODO: Create setters
+    this.defaultLineWidth = lineWidth;
     this.lineSpacing = lineSpacing;
     this.background = "white";
-    this.defaultWaveAmplitude = 0.5; // TODO
+    this.backgroundBorderNoise = 0;
+    this.defaultWaveAmplitude = 0.5;
     this.defaultWavePeriod = 60;
+
+    // Colour variables
+    this.dark2 = { hue: 0, sat: 0, light: 15 };
+
+    // Shadow diagonal variables
+    // TODO: Create setters
+    this.hasShadowDiagonal = true;
+    this.shadowDiagonalXOrigin =
+      this.canvas.getBoundingClientRect().width * 0.7; // TODO: Is there a better way given the resize()?
+    this.shadowDiagonalDirection = "left"; // Shadow to the left side
+    this.shadowDiagonalAngle = (4 * Math.PI) / 5;
+    this.shadowDiagonalEdgeNoise = 30;
+    this.shadowDiagonalNoiseTable = []; // TODO: Should this be initialised here?
 
     // Random number generation
     this.seed = 10; // TODO: Use a random or provided seed
@@ -57,19 +82,42 @@ export class EtchRenderer {
 
   generateLines() {
     // This function generates the objects that are used to store information about each line that is drawn
-    const lineHeight = this.lineWidth + this.lineSpacing;
-    const numLines = Math.floor(this.canvas.height / lineHeight) - 2; // leave a line's space at the top and bottom
+    // TODO: Using getBoundingClient feels janky
+    const lineHeight = this.defaultLineWidth + this.lineSpacing;
+    const numLines =
+      Math.floor(this.canvas.getBoundingClientRect().height / lineHeight) - 2; // leave a line's space at the top and bottom
     this.lines = [];
     for (let i = 0; i < numLines; i++) {
       this.lines.push({
         id: i,
         y: lineHeight * (i + 1) + this.lineSpacing,
         startX: 0, // TODO: set by the background padding and mask
-        endX: this.canvas.width,
+        //endX: this.canvas.width, // TODO: Something is going wrong here. Need to understand more
+        endX: this.canvas.getBoundingClientRect().width,
         segments: [], // Information on what to draw is stored here
         // lengthNoiseTable: [], // What segments have length noise applied, and how much
       });
     }
+
+    if (this.hasShadowDiagonal) {
+      this.generateShadowDiagonalEdge();
+    }
+  }
+
+  generateShadowDiagonalEdge() {
+    this.shadowDiagonalNoiseTable = this.lines.map(() =>
+      Math.round((this.random() - 0.5) * this.shadowDiagonalEdgeNoise),
+    );
+    this.shadowDiagonalLocations = this.lines.map((line) =>
+      this.getShadowCrossingForLine(line),
+    );
+    console.log(this.shadowDiagonalXOrigin, this.shadowDiagonalLocations);
+  }
+
+  setBackgroundBorderNoise(noise) {
+    // TODO: Assert positive
+    // Must be called before setBackground
+    this.backgroundBorderNoise = noise;
   }
 
   setBackground(background) {
@@ -77,7 +125,20 @@ export class EtchRenderer {
     this.background = background;
     // For each line, we will add a segment for the background colour
     for (const line of this.lines) {
-      this.addSegment(line.id, line.startX, line.endX, undefined, true);
+      let leftOffset = 0;
+      let rightOffset = 0;
+      if (this.backgroundBorderNoise) {
+        leftOffset = Math.round(this.random() * this.backgroundBorderNoise);
+        rightOffset = Math.round(this.random() * this.backgroundBorderNoise);
+      }
+
+      this.addSegment(
+        line.id,
+        line.startX + leftOffset,
+        line.endX - rightOffset,
+        undefined,
+        true,
+      );
     }
   }
 
@@ -101,6 +162,9 @@ export class EtchRenderer {
       let startX = config.x - sqrtTerm;
       let endX = config.x + sqrtTerm;
 
+      // Don't add noise to a zero length segment
+      if (startX == endX) continue;
+
       [startX, endX] = this.addEdgeNoise(startX, endX, layerId, line.id);
 
       // Don't add a zero length segment
@@ -123,23 +187,30 @@ export class EtchRenderer {
     const affectedLines = this.getAffectedLines(startY, endY);
 
     // Find all the verticle lines of this polygon
-    const verticalLines = this.getVerticalLinesOfPolygon(config.vertices);
+    const verticalLines = getVerticalLinesOfPolygon(config.vertices);
 
     // Add a segment to each of these lines
     for (const line of affectedLines) {
       // Does this line intersect any of the verticle lines
       const verticalCrossings = verticalLines.filter(
-        (vert) => vert.y1 <= line.y && line.y < vert.y2,
+        (vert) => vert.y1 <= line.y && line.y <= vert.y2,
       );
-
-      if (verticalCrossings.length != 2) {
-        throw new Error("There must be 2 vertical crossings for this polygon");
-      }
-      // calculate the segment to add
       let range = verticalCrossings.map((vert) => vert.x);
       range.sort((a, b) => a - b);
+
+      // If there are 3 verticle crossings, then this line is intersecting
+      // a horizontal line of the polygon |_|-| <=
+      if (verticalCrossings.length == 3) {
+        // Take the smallest and largest x values by removing the middle value
+        range.splice(1, 1);
+      }
+
+      // calculate the segment to add
       let startX = range[0];
       let endX = range[1];
+
+      // Don't add noise to a zero length segment
+      if (startX == endX) continue;
 
       [startX, endX] = this.addEdgeNoise(startX, endX, layerId, line.id);
 
@@ -205,33 +276,27 @@ export class EtchRenderer {
   }
 
   drawLine(line) {
+    // Find the shadow diagonal crossing for this line, if there is one
+    const shadowPaddingFactor = 0.4; // How much to attenuate padding in the shadow region TODO: move to top
+
     // For each final segment, draw a line to the canvas
     // TODO: Create helper functions for get colour, get offset left, right
     for (let i = 0; i < line.segments.length; i++) {
       const segment = line.segments[i];
 
+      // TODO: Don't apply padding within the shadow region
       // Check for right-padding in the left neighbour
       // This would be implemented by shifting the left point of this segment
-      let startXOffset = 0;
-      if (i > 0) {
-        const leftNeighbour = line.segments[i - 1];
-        const leftNeighbourLayer =
-          this.layers[leftNeighbour.layerId] || undefined;
-        if (leftNeighbourLayer && !leftNeighbour.rightCoveredByLayer) {
-          startXOffset = leftNeighbourLayer.rightPadding || 0;
-        }
+      let startXOffset = this.getStartXOffsetFromPadding(i, line);
+      if (this.isInShadow(segment.startX, line)) {
+        startXOffset *= shadowPaddingFactor;
       }
 
       // Check for left-padding in the right neighbour
       // This would be implemented by shifting the right point of this segment
-      let endXOffset = 0;
-      if (i < line.segments.length - 1) {
-        const rightNeighbour = line.segments[i + 1];
-        const rightNeighbourLayer =
-          this.layers[rightNeighbour.layerId] || undefined;
-        if (rightNeighbourLayer && !rightNeighbour.leftCoveredByLayer) {
-          endXOffset = rightNeighbourLayer.leftPadding || 0;
-        }
+      let endXOffset = this.getEndXOffsetFromPadding(i, line);
+      if (this.isInShadow(segment.endX, line)) {
+        endXOffset *= shadowPaddingFactor;
       }
 
       const actualStartX = segment.startX + startXOffset;
@@ -239,45 +304,51 @@ export class EtchRenderer {
 
       if (actualEndX <= actualStartX) continue;
 
-      const colour = this.getColourOfSegment(segment);
-
-      this.drawSegment(
-        actualStartX,
-        actualEndX,
-        line.y,
-        colour,
-        segment.layerId,
-      );
+      this.drawSegment(actualStartX, actualEndX, line, segment);
     }
   }
 
-  drawSegment(x1, x2, y, colour, layerId) {
-    // TODO: The arguments are a bit strange here
-    let yOffset = this.getWaveYOffset(x1, layerId);
+  drawSegment(x1, x2, line, segment) {
+    // TODO: The arguments are a bit strange here, refactor
+
+    // Get the custom line width of the layer
+    const layer = this.layers[segment.layerId] || undefined;
+    const lineWidth = layer?.lineWidth || this.defaultLineWidth;
+
+    // Set up to draw the first point of the line
+    let yOffset = this.getWaveYOffset(x1, layer);
     this.context.beginPath();
-    this.context.moveTo(x1, y + yOffset);
+    this.context.moveTo(x1, line.y + yOffset);
 
     // We draw each segment as a waved line
     let currentX = x1;
     while (currentX < x2) {
+      // Don't moveTo and lineTo the first point
       if (currentX > x1) {
-        // Don't moveTo and lineTo the first point
-        yOffset = this.getWaveYOffset(currentX, layerId);
-
         // Draw the current line section
+        yOffset = this.getWaveYOffset(currentX, layer);
+
+        // Decide whether to add a line break at the current point
+        // TODO: More line breaks in the background?
+        //TODO: Pull from table
         if (this.random() > EtchRenderer.PROB_LINE_BREAK) {
           const lineWidthNoise =
             (this.random() - 0.5) * EtchRenderer.LINE_WIDTH_NOISE_RANGE;
-          this.context.lineTo(currentX, y + yOffset);
-          this.context.lineWidth = this.lineWidth + lineWidthNoise;
-          this.context.strokeStyle = this.addLightnessNoise(colour);
+
+          this.context.lineTo(currentX, line.y + yOffset);
+          this.context.lineWidth = lineWidth + lineWidthNoise;
+          this.context.strokeStyle = this.getStrokeColour(
+            currentX,
+            segment,
+            line,
+          );
           //this.context.lineCap = "round";
           this.context.stroke();
         }
 
         // Setup for the next line
         this.context.beginPath();
-        this.context.moveTo(currentX, y + yOffset);
+        this.context.moveTo(currentX, line.y + yOffset);
       }
 
       // Quantise the x locations
@@ -290,14 +361,64 @@ export class EtchRenderer {
     }
 
     // Draw the final point
-    yOffset = this.getWaveYOffset(x2, layerId);
-    this.context.lineTo(x2, y + yOffset);
+    yOffset = this.getWaveYOffset(x2, layer);
+    this.context.lineTo(x2, line.y + yOffset);
 
     // Add the line to the canvas
-    this.context.lineWidth = this.lineWidth;
-    this.context.strokeStyle = this.addLightnessNoise(colour);
+    this.context.lineWidth = lineWidth;
+    this.context.strokeStyle = this.getStrokeColour(currentX, segment, line);
     //this.context.lineCap = "round";
     this.context.stroke();
+  }
+
+  getStrokeParameters(x1, segment, line) {
+    return this.getStrokeColour(x1, segment, line);
+  }
+
+  getStartXOffsetFromPadding(segmentId, line) {
+    // Check for right-padding in the left neighbour
+    // This would be implemented by shifting the left point of this segment
+    let startXOffset = 0;
+    if (segmentId > 0) {
+      const leftNeighbour = line.segments[segmentId - 1];
+      const leftNeighbourLayer =
+        this.layers[leftNeighbour.layerId] || undefined;
+      if (leftNeighbourLayer && !leftNeighbour.rightCoveredByLayer) {
+        startXOffset = leftNeighbourLayer.rightPadding || 0;
+      }
+    }
+
+    return startXOffset;
+  }
+
+  getEndXOffsetFromPadding(segmentId, line) {
+    // Check for left-padding in the right neighbour
+    // This would be implemented by shifting the right point of this segment
+    let endXOffset = 0;
+    if (segmentId < line.segments.length - 1) {
+      const rightNeighbour = line.segments[segmentId + 1];
+      const rightNeighbourLayer =
+        this.layers[rightNeighbour.layerId] || undefined;
+      if (rightNeighbourLayer && !rightNeighbour.leftCoveredByLayer) {
+        endXOffset = rightNeighbourLayer.leftPadding || 0;
+      }
+    }
+
+    return endXOffset;
+  }
+
+  getStrokeColour(x1, segment, line) {
+    // Get the colour of the segment
+    let colour = this.getColourOfSegment(segment);
+
+    // Apply the shadow diagonal if needed
+    if (this.isInShadow(x1, line) && !segment.isBackground) {
+      colour = this.dark2;
+    }
+
+    // Apply lightness noise
+    return this.addLightnessNoise(colour);
+    // TODO: More lightness noise in the shadow region?
   }
 
   getColourOfSegment(segment) {
@@ -309,6 +430,41 @@ export class EtchRenderer {
     }
 
     return colour;
+  }
+
+  isInShadow(x, line) {
+    const shadowDiagonalX = this.shadowDiagonalLocations[line.id];
+
+    if (this.hasShadowDiagonal) {
+      if (
+        (this.shadowDiagonalDirection == "left" && x < shadowDiagonalX) ||
+        (this.shadowDiagonalDirection == "right" && x >= shadowDiagonalX)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  getShadowCrossingForLine(line) {
+    const y = line.y;
+    // Remember: Positive y is down, but we have specified the angle from the bottom x-axis
+    const maxY = this.canvas.getBoundingClientRect().height; // TODO: This should be global
+    const yFromBottom = maxY - y;
+    let shadowX =
+      yFromBottom / Math.tan(this.shadowDiagonalAngle) +
+      this.shadowDiagonalXOrigin;
+
+    // Apply the shadow diagonal edge noise for this line
+    shadowX += this.shadowDiagonalNoiseTable[line.id];
+    shadowX = Math.round(shadowX);
+
+    shadowX = Math.max(
+      Math.min(shadowX, this.canvas.getBoundingClientRect().width),
+      0,
+    );
+
+    return shadowX;
   }
 
   addLightnessNoise(colour) {
@@ -400,40 +556,16 @@ export class EtchRenderer {
     segments.sort((a, b) => a.startX - b.startX);
   }
 
-  getVerticalLinesOfPolygon(vertices) {
-    let verticalLines = [];
-
-    // Make a copy and duplicate the first point at the end to allow for
-    // The last line to be formed
-    let verticesCopy = [...vertices];
-    verticesCopy.push(vertices[0]);
-
-    for (let i = 1; i < verticesCopy.length; i++) {
-      if (
-        verticesCopy[i - 1].x == verticesCopy[i].x &&
-        verticesCopy[i - 1].y != verticesCopy[i].y
-      ) {
-        verticalLines.push({
-          x: verticesCopy[i].x,
-          y1: Math.min(verticesCopy[i - 1].y, verticesCopy[i].y),
-          y2: Math.max(verticesCopy[i - 1].y, verticesCopy[i].y),
-        });
-      }
-    }
-
-    return verticalLines;
-  }
-
-  getWaveYOffset(x, layerId) {
+  getWaveYOffset(x, layer) {
     // Returns the y-offset to be applied at the specified x
     // To add the wave defined by wavePeriod and waveAmplitude
     let wavePeriod = this.defaultWavePeriod;
     let waveAmplitude = this.defaultWaveAmplitude;
 
-    if (layerId) {
+    if (layer) {
       // Check whether custom wave parameters exist for this layer
-      wavePeriod = this.layers[layerId].wavePeriod || wavePeriod;
-      waveAmplitude = this.layers[layerId].waveAmplitude || waveAmplitude;
+      wavePeriod = layer.wavePeriod || wavePeriod;
+      waveAmplitude = layer.waveAmplitude || waveAmplitude;
     }
 
     // TODO: Should this be uniform for the whole line?

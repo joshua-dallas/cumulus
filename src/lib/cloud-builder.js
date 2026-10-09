@@ -1,4 +1,9 @@
-import { mulberry32, intersectionOfMany, subtractRanges } from "./utils.js";
+import {
+  mulberry32,
+  intersectionOfMany,
+  subtractRanges,
+  getHorizontalLinesOfPolygon,
+} from "./utils.js";
 
 export class CloudBuilder {
   static MAX_CELLS = 100;
@@ -7,7 +12,10 @@ export class CloudBuilder {
   static MAX_CELL_RADIUS = 0.22; // Maximum cell radius as a fraction of the dome radius
   // TODO: Add additional padding to allow for cells to grow and rise
   // TODO: Minimum base width for matched bottom cell?
+  // TODO: Max allowed overhang
   // TODO: Child stepped down cells
+  // TODO: Fractal behaviour in cloud cells (shade and light)
+  // TODO: Find weighted centre of cells and position in the centre
 
   constructor(width = 500, height = 500, numCells = 10, seed = 42) {
     this.random = mulberry32(seed);
@@ -35,11 +43,14 @@ export class CloudBuilder {
 
     this.generateCells(Math.min(numCells, CloudBuilder.MAX_CELLS));
     this.matchBottomCell();
-    this.sortBySize();
+    this.addSteppedChildCells();
     this.addExtensionLines();
     this.fillInnerGaps();
     this.createCloudInner();
     this.fillCentreLineGaps();
+    this.addFractalsToCells();
+    this.addFillCirclesToHorzontals();
+    this.sortBySize();
   }
 
   generateCells(numCells) {
@@ -219,7 +230,7 @@ export class CloudBuilder {
           prevVertex = vertex;
         } else {
           // This vertex is further in and should not be added
-          // Check if the rectangle connected to this vertex overlaps the rectangle from the previous vertex
+          // Check if the rectangle connected to this vertex exceeds the rectangle from the previous vertex
           // Start by finding the matching lower vertices
           let vertexLower = vertices.filter(
             (v) => v.type == "lower" && v.id == vertex.id,
@@ -231,10 +242,8 @@ export class CloudBuilder {
           if (vertexLower.y > prevVertexLower.y) {
             // We will create a new vertex at the same height as prevVertexLower
             vertices.splice(vertices.indexOf(prevVertexLower) + 1, 0, {
-              x: vertex.x,
+              ...vertex,
               y: prevVertexLower.y,
-              type: "upper",
-              id: vertex.id,
             });
           }
         }
@@ -341,10 +350,231 @@ export class CloudBuilder {
     }
   }
 
+  addSteppedChildCells() {
+    const probOfSteppedChild = 0.5; // TODO: Move to top
+    const childXOffsetRadio = 0.9; // Spacing between parent and child centres, ratio of parent radius
+    const childRadiusRatio = 0.5; // TODO: Randomise?
+    const numberOfChildren = 2;
+    // Using a random number, decide whether each cell will have stepped children
+    const originalCellCount = this.cells.length;
+    for (let i = 0; i < originalCellCount; i++) {
+      const cell = this.cells[i];
+      if (this.random() < probOfSteppedChild) {
+        // For each cell with stepped children, determine which side it is on
+        const side = cell.x >= this.dome.x ? 1 : -1;
+
+        // Add stepped children with matching baselines
+        for (let i = 0; i < numberOfChildren; i++) {
+          const xOffset =
+            side * // Move left or right
+            cell.radius *
+            //childRadiusRatio ** i * // For each stepped child, move based on the radius of the past child
+            childXOffsetRadio *
+            (i + 1);
+
+          const radius = Math.round(cell.radius * childRadiusRatio ** (i + 1));
+          const x = Math.round(cell.x + xOffset);
+          const y = cell.y + cell.radius - radius; // Align the baselines
+
+          this.cells.push({ x, y, radius, id: this.cells.length });
+        }
+      }
+    }
+  }
+
   sortBySize() {
     // Sort the cells by size such that the smallest cells are last
     // Therefore, smaller cells will be drawn on top of larger cells
     this.cells.sort((a, b) => b.radius - a.radius);
+  }
+
+  addFractalsToCells() {
+    this.lightFractalCircles = [];
+    this.darkFractalCircles = [];
+    for (const cell of this.cells) {
+      this.lightFractalCircles = this.lightFractalCircles.concat(
+        this.generateLightFractalsForCell(cell),
+      );
+      this.darkFractalCircles = this.darkFractalCircles.concat(
+        this.generateDarkFractalsForCell(cell),
+      );
+    }
+  }
+
+  generateLightFractalsForCell(cell) {
+    // TODO: Better naming
+    // TODO: Move constants elsewhere
+    const numberOfFractals = 20; // TODO: Should this be dependant on cell radius?
+
+    // Generate fractal circles
+    let lightFractalCircles = [];
+    for (let i = 0; i < numberOfFractals; i++) {
+      lightFractalCircles.push(this.generateLightFractalCircle(cell));
+    }
+
+    // Sort them largest to smallest
+    // TODO: Is it better without this?
+    lightFractalCircles.sort((a, b) => b.radius - a.radius);
+
+    return lightFractalCircles;
+  }
+
+  generateDarkFractalsForCell(cell) {
+    // TODO: Better naming
+    // TODO: Move constants elsewhere
+    const numberOfFractals = 11; // TODO: Should this be dependant on cell radius?
+    const probOfDarkFractals = 0.6; // Not every cell will have dark fractals
+
+    if (this.random() > probOfDarkFractals) return [];
+
+    // Generate fractal circles
+    let darkFractalCircles = [];
+    for (let i = 0; i < numberOfFractals; i++) {
+      darkFractalCircles.push(this.generateDarkFractalCircle(cell));
+    }
+
+    // Sort them largest to smallest
+    // TODO: Is it better without this?
+    darkFractalCircles.sort((a, b) => b.radius - a.radius);
+
+    return darkFractalCircles;
+  }
+
+  generateLightFractalCircle(cell) {
+    // TODO: Impose minimum distance and limit maxRadius
+    const minRadiusRatio = 0.2; // Ratio of fractal radius to cell radius
+    const maxRadiusRatio = 0.45;
+    const minRightPadding = 4;
+    const maxRightPadding = 6;
+    const shadowAngle = -Math.PI / 4; // TODO: Use a random number for this
+
+    const angle = ((this.random() * 3) / 2) * Math.PI - Math.PI / 2; // TODO: Tailor these angles
+    const dist = this.random() * cell.radius;
+
+    const x = Math.round(cell.x + dist * Math.cos(angle));
+    const y = Math.round(cell.y - dist * Math.sin(angle));
+
+    const radius = Math.round(
+      cell.radius *
+        (this.random() * (maxRadiusRatio - minRadiusRatio) + minRadiusRatio),
+    );
+
+    // If the fractal circle is below a certain angle,
+    // it is at the bottom of the cell and should be less bright
+    let rightPadding = 0;
+    if (angle > shadowAngle) {
+      // TODO: Confirm this is working as intended with the direction of y
+      rightPadding = Math.round(
+        this.random() * (maxRightPadding - minRightPadding) + minRightPadding,
+      );
+    }
+
+    return {
+      linkedCell: cell.id,
+      x,
+      y,
+      radius,
+      rightPadding,
+    };
+  }
+
+  generateDarkFractalCircle(cell) {
+    // TODO: Impose minimum distance and limit maxRadius
+    const minRadiusRatio = 0.15; // Ratio of fractal radius to cell radius
+    const maxRadiusRatio = 0.25;
+    const minDist = 0.5; // Fraction of cell radius
+
+    const angle = ((this.random() * 2) / 3) * Math.PI + Math.PI * (2 / 3); // TODO: Tailor these angles
+    const dist = (this.random() * (1 - minDist) + minDist) * cell.radius;
+
+    const x = Math.round(cell.x + dist * Math.cos(angle));
+    const y = Math.round(cell.y - dist * Math.sin(angle));
+
+    const radius = Math.round(
+      cell.radius *
+        (this.random() * (maxRadiusRatio - minRadiusRatio) + minRadiusRatio),
+    );
+
+    return {
+      linkedCell: cell.id,
+      x,
+      y,
+      radius,
+    };
+  }
+
+  addFillCirclesToHorzontals() {
+    this.addFillCirclesToHorzontalsAux("left");
+    this.addFillCirclesToHorzontalsAux("right");
+  }
+
+  addFillCirclesToHorzontalsAux(side) {
+    const maxStraightFillLength = 0.3; // Ratio of dome radius. TODO: Move to top, better name, might be too large
+    const numberOfCircles = 12; // TODO: Make random based on length
+
+    let polygon;
+    if (side == "left") {
+      polygon = this.cloudInnerLeft;
+    } else if (side == "right") {
+      polygon = this.cloudInnerRight;
+    } else {
+      throw new Error("Invalid side specified. Must be 'left' or 'right'.");
+    }
+
+    // Locate all upper horizontal fill lines
+    const horizontalLines = getHorizontalLinesOfPolygon(
+      polygon,
+      (v1, v2) =>
+        (v1.type == "upper" || v2.type == "upper") &&
+        v1.type != "lower" &&
+        v2.type != "lower",
+    );
+    // Based on the length of the horizontal fill,
+    // Choose a random number of circles to create.
+    for (const line of horizontalLines) {
+      if (line.x2 - line.x1 > this.dome.radius * maxStraightFillLength) {
+        for (let i = 0; i < numberOfCircles; i++) {
+          // Create the circles at random positions along the line with random radius
+          // Link to the cell that formed the horizontal line
+          const x = Math.round(this.random() * (line.x2 - line.x1) + line.x1);
+
+          let linkedCellId;
+          if (side == "left") {
+            linkedCellId =
+              line.vertices[0].x < line.vertices[1].x
+                ? line.vertices[0].id
+                : line.vertices[1].id;
+          } else {
+            linkedCellId =
+              line.vertices[0].x > line.vertices[1].x
+                ? line.vertices[0].id
+                : line.vertices[1].id;
+          }
+          // TODO: Using id as index is dangerous due to sortBySize
+          const linkedCell = this.cells[linkedCellId];
+
+          const radius = Math.round(
+            this.random() *
+              (linkedCell.lowerExtension - linkedCell.upperExtension),
+          );
+          if (line.y > linkedCell.y) {
+            console.log(
+              "Horizontal fill circle is lower than it should be",
+              line,
+              linkedCell,
+            );
+          }
+          // TODO: store separately to keep with sim
+
+          this.fillCircles.push({
+            x,
+            y: line.y,
+            radius,
+            linkedCell: linkedCellId,
+          });
+        }
+      }
+    }
   }
 
   randomCellRadius() {
