@@ -13,7 +13,7 @@ export class Cumulus extends HTMLElement {
     const width = Number(this.getAttribute("width")) || 500;
     const height = Number(this.getAttribute("height")) || 500;
     const numCells = Number(this.getAttribute("numCells")) || 10;
-    const seed = Number(this.getAttribute("seed")) || 42; // TODO: randomize seed if not provided
+    const seed = Number(this.getAttribute("seed")) || 314; // TODO: randomize seed if not provided 312 is good
     const lineWidth = Number(this.getAttribute("lineWidth")) || 1;
     const lineSpacing = Number(this.getAttribute("lineWidth")) || 2;
 
@@ -25,25 +25,30 @@ export class Cumulus extends HTMLElement {
     );*/
 
     const shadow = this.attachShadow({ mode: "open" });
-    const canvas = document.createElement("canvas");
-    canvas.style.height = `${height}px`;
-    canvas.style.width = `${width}px`;
-    //canvas.width = width;
-    //canvas.height = height;
-    shadow.append(canvas);
+    this.canvas = document.createElement("canvas");
+    this.context = this.canvas.getContext("2d");
+    if (!this.context) return;
 
-    // Define the shade colours
-    // TODO: Define as consts outside of connectedCallback
-    this.background = { hue: 206, sat: 57, light: 60 };
-    this.light = { hue: 0, sat: 0, light: 100 };
-    this.mid = { hue: 0, sat: 0, light: 75 };
-    this.dark = { hue: 0, sat: 0, light: 50 };
-    this.dark2 = { hue: 0, sat: 0, light: 15 };
+    this.canvas.style.height = `${height}px`;
+    this.canvas.style.width = `${width}px`;
+    this.canvas.width = width; // TODO; do these help?
+    this.canvas.height = height;
+    shadow.append(this.canvas);
 
     // Set up the renderer
-    this.renderer = new EtchRenderer(canvas, lineWidth, lineSpacing);
+    this.renderer = new EtchRenderer(this.canvas, lineWidth, lineSpacing);
+    // Define the shade colours
+    // TODO: Define as consts outside of connectedCallback
+    this.renderer.colours.background = { hue: 206, sat: 57, light: 60 };
+    this.renderer.colours.light = { hue: 0, sat: 0, light: 100 };
+    this.renderer.colours.mid = { hue: 0, sat: 0, light: 75 };
+    this.renderer.colours.dark = { hue: 0, sat: 0, light: 50 };
+    this.renderer.colours.dark2 = { hue: 0, sat: 0, light: 15 };
     this.renderer.setBackgroundBorderNoise(3);
-    this.renderer.setBackground(this.background);
+    this.renderer.finaliseRenderer();
+
+    this.drawFrame();
+
     //this.renderer.setBackgroundPadding()
     //this.renderer.setBackgroundMask()
     //this.renderer.setBackgroundBoxNoise({leftVert, rightVert, topHor, bottomHor})
@@ -54,14 +59,6 @@ export class Cumulus extends HTMLElement {
     //this.renderer.setBorderLinesEndShape() // tapered, rounded, noise on length, occassional dot at the end
     //this.renderer.addLayer(json)
 
-    // Add the layers
-    this.addFillCircleLayers(this.cloudBuilder.fillCircles);
-    this.addCloudInnerLeftLayer(this.cloudBuilder.cloudInnerLeft);
-    this.addCloudInnerRightLayer(this.cloudBuilder.cloudInnerRight);
-    this.addCloudCellLayers(this.cloudBuilder.cells);
-
-    this.renderer.draw();
-
     //this.renderer.renderCells(this.cloudBuilder.cells);
     //this.renderer.renderCells(this.cloudBuilder.fillCircles);
     //this.renderer.renderPolygon(this.cloudBuilder.cloudInnerRight);
@@ -69,8 +66,7 @@ export class Cumulus extends HTMLElement {
 
     /*
     // Draw the dome and border for testing
-    const context = canvas.getContext("2d");
-    if (!context) return;
+
 
     // Draw the dome
     context.beginPath();
@@ -96,6 +92,38 @@ export class Cumulus extends HTMLElement {
     );
     context.lineTo(this.cloudBuilder.dome.x, this.cloudBuilder.dome.y);
     context.stroke();*/
+
+    // Animation
+    requestAnimationFrame(this.createNextFrame.bind(this));
+  }
+
+  createNextFrame(timestamp) {
+    // Clear the canvas
+    this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Save the current config. TODO: Might not be needed
+    // this.context.save();
+    //const dpr = window.devicePixelRatio;
+    //this.context.scale(dpr, dpr);
+
+    // Simulate and draw the next frame
+    this.cloudBuilder.simulateNextFrame(timestamp);
+    this.renderer.clear();
+    this.drawFrame();
+
+    //this.context.restore();
+
+    requestAnimationFrame(this.createNextFrame.bind(this));
+  }
+
+  drawFrame() {
+    // Add the layers
+    this.addFillCircleLayers(this.cloudBuilder.fillCircles);
+    this.addCloudInnerLeftLayer(this.cloudBuilder.cloudInnerLeft);
+    this.addCloudInnerRightLayer(this.cloudBuilder.cloudInnerRight);
+    this.addCloudCellLayers(this.cloudBuilder.cells);
+
+    this.renderer.draw();
   }
 
   addCloudCellLayer(cell) {
@@ -104,7 +132,7 @@ export class Cumulus extends HTMLElement {
       x: cell.x,
       y: cell.y,
       radius: cell.radius,
-      fill: this.dark,
+      fill: this.renderer.colours.dark,
       rightEdgeNoise: 4, // Plus or minus this many pixels
       leftEdgeNoise: 7,
       rightPadding: 3, // TODO: Try without
@@ -124,7 +152,7 @@ export class Cumulus extends HTMLElement {
         x: fractal.x,
         y: fractal.y,
         radius: fractal.radius,
-        fill: this.dark2,
+        fill: this.renderer.colours.dark2,
         rightEdgeNoise: 2, // Plus or minus this many pixels
         leftEdgeNoise: 4,
         rightPadding: 0,
@@ -144,7 +172,7 @@ export class Cumulus extends HTMLElement {
         x: fractal.x,
         y: fractal.y,
         radius: fractal.radius,
-        fill: this.mid,
+        fill: this.renderer.colours.mid,
         rightEdgeNoise: 4, // Plus or minus this many pixels
         leftEdgeNoise: 4,
         rightPadding: fractal.rightPadding,
@@ -161,7 +189,7 @@ export class Cumulus extends HTMLElement {
       x: circle.x,
       y: circle.y,
       radius: circle.radius,
-      fill: this.dark,
+      fill: this.renderer.colours.dark,
       lineWidth: 1.3,
       rightEdgeNoise: 6,
       leftEdgeNoise: 6,
@@ -173,7 +201,7 @@ export class Cumulus extends HTMLElement {
   addCloudInnerRightLayer(inner) {
     this.renderer.addRightAnglePolygonLayer({
       vertices: inner,
-      fill: this.dark,
+      fill: this.renderer.colours.dark,
       lineWidth: 1.3,
       rightEdgeNoise: 5,
       leftEdgeNoise: 0,
@@ -186,7 +214,7 @@ export class Cumulus extends HTMLElement {
   addCloudInnerLeftLayer(inner) {
     this.renderer.addRightAnglePolygonLayer({
       vertices: inner,
-      fill: this.dark,
+      fill: this.renderer.colours.dark,
       lineWidth: 1.3,
       rightEdgeNoise: 0,
       leftEdgeNoise: 5,

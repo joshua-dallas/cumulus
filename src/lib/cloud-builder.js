@@ -12,9 +12,6 @@ export class CloudBuilder {
   static MAX_CELL_RADIUS = 0.22; // Maximum cell radius as a fraction of the dome radius
   // TODO: Add additional padding to allow for cells to grow and rise
   // TODO: Minimum base width for matched bottom cell?
-  // TODO: Max allowed overhang
-  // TODO: Child stepped down cells
-  // TODO: Fractal behaviour in cloud cells (shade and light)
   // TODO: Find weighted centre of cells and position in the centre
 
   constructor(width = 500, height = 500, numCells = 10, seed = 42) {
@@ -51,6 +48,47 @@ export class CloudBuilder {
     this.addFractalsToCells();
     this.addFillCirclesToHorzontals();
     this.sortBySize();
+  }
+
+  simulateNextFrame() {
+    // This function is passed the timestamp
+    //this.moveCloudCells();
+    //this.growCloudCells()
+    //this.fractalEffects()
+
+    // Clear the innerFill
+
+    // Recalculate as needed
+    this.createCloudInner();
+    this.fillCentreLineGaps();
+  }
+
+  moveCloudCells() {
+    for (const cell of this.cells) {
+      const r = this.random();
+      const step = 3;
+
+      if (r < 0.3) {
+        // Move up
+        cell.y -= step;
+        this.lightFractalCircles
+          .filter((c) => c.linkedCell == cell.id)
+          .forEach((fractal) => (fractal.y -= step));
+        this.darkFractalCircles
+          .filter((c) => c.linkedCell == cell.id)
+          .forEach((fractal) => (fractal.y -= step));
+      } else if (r < 0.6) {
+        // Move down
+        cell.y += step;
+        this.lightFractalCircles
+          .filter((c) => c.linkedCell == cell.id)
+          .forEach((fractal) => (fractal.y += step));
+        this.darkFractalCircles
+          .filter((c) => c.linkedCell == cell.id)
+          .forEach((fractal) => (fractal.y += step));
+      }
+      // Otherwise, stay still
+    }
   }
 
   generateCells(numCells) {
@@ -479,7 +517,6 @@ export class CloudBuilder {
   }
 
   generateDarkFractalCircle(cell) {
-    // TODO: Impose minimum distance and limit maxRadius
     const minRadiusRatio = 0.15; // Ratio of fractal radius to cell radius
     const maxRadiusRatio = 0.25;
     const minDist = 0.5; // Fraction of cell radius

@@ -13,12 +13,20 @@ import {
 // TODO: Line width gradient down background
 // TODO: Padding noise?
 // TODO: Higher prob of line breaks (and longer ones) in first and last line
+// TODO: Compute y offsets and save before draw
+// TODO: Smooth transition line width and y offset between segments (have a flag for this)
+// TODO: Set a flag in finalise renderer that is checked in draw
+// TODO: Will it improve performance to round long decimal values to 3sf?
+
+// Performance boosts
+// - Compute noise once and save
+// - Save y offsets rather than computing each time
 
 export class EtchRenderer {
   static DRAW_STEP = 2;
   static LIGHTNESS_NOISE_RANGE = 13;
   static PROB_LINE_BREAK = 0.0009;
-  static WAVE_X_NOISE_RANGE = 6;
+  static WAVE_X_NOISE_RANGE = 8;
   static LINE_Y_NOISE_RANGE = 0.4;
   static LINE_WIDTH_NOISE_RANGE = 0.3;
 
@@ -29,15 +37,18 @@ export class EtchRenderer {
     // TODO: Create setters
     this.defaultLineWidth = lineWidth;
     this.lineSpacing = lineSpacing;
-    this.background = "white";
     this.backgroundBorderNoise = 0;
     // How much thicker the background lines are at the bottom compared to the top
     this.backgroundLineWidthGradientDown = 0.4; // TODO: Specify thicker lines at the top, perhaps another variable
     this.defaultWaveAmplitude = 0.5;
     this.defaultWavePeriod = 60;
+    this.hasBackground = true;
 
-    // Colour variables
-    this.dark2 = { hue: 0, sat: 0, light: 15 };
+    // Default colour variables
+    this.colours = {
+      background: { hue: 206, sat: 57, light: 60 },
+      dark2: { hue: 0, sat: 0, light: 15 },
+    };
 
     // Shadow diagonal variables
     // TODO: Create setters
@@ -47,33 +58,34 @@ export class EtchRenderer {
     this.shadowDiagonalDirection = "left"; // Shadow to the left side
     this.shadowDiagonalAngle = (4 * Math.PI) / 5;
     this.shadowDiagonalEdgeNoise = 30;
-    this.shadowDiagonalNoiseTable = []; // TODO: Should this be initialised here?
 
     // Random number generation
     this.seed = 10; // TODO: Use a random or provided seed
     this.random = mulberry32(this.seed);
-    this.edgeNoiseTable = [];
     this.noise = {
       layerEdge: [],
-      shadowDiagonalEdge: [],
+      shadowDiagonal: [],
+      waveXOffset: [],
+      borderEdgeLeft: [],
+      borderEdgeRight: [],
+      //wavePeriod: [],
       yOffset: [], // TODO: When dealing with unquantised locations, use floor
-      xWaveOffset: [],
-      //xWavePeriod: [],
-      lineBreaks: [],
-      brightness: [],
       lineWidth: [],
-      backgroundEdgeLeft: [],
-      backgroundEdgeRight: [],
+      lineBreaks: [],
+      lightness: [],
+      //lightnessPerLine; [], // Slight banding effect
+      //borderLineBreaks: [],
     };
+
+    // Initialise variables for storing the layers and rendered lines
+    this.layers = [];
+    this.lines = [];
+    this.baseYOffset = [];
 
     // Get the canvas context
     this.context = canvas.getContext("2d");
     if (!this.context) throw new Error("Failed to get 2D context from canvas");
     this.resize();
-
-    // Initialise variables for storing the layers and rendered lines
-    this.layers = [];
-    this.generateLines();
   }
 
   resize() {
@@ -89,6 +101,61 @@ export class EtchRenderer {
     // Set the 'drawn' size of the canvas
     this.canvas.style.width = `${rect.width}px`;
     this.canvas.style.height = `${rect.height}px`;
+  }
+
+  finaliseRenderer() {
+    this.generateLines();
+    this.initialiseNoise(); //TODO: generate?
+    this.generateShadowDiagonalEdge();
+    this.calculateBaseYOffset();
+    this.addBackground();
+  }
+
+  initialiseNoise() {
+    // TODO: This needs to be called after all the parameters have been set
+    // TODO: Do we only create noise where it is enabled, or do we only apply it if is enabled?
+    // Let's create all the noise first
+    const numXSteps = Math.ceil(
+      this.canvas.getBoundingClientRect().width / EtchRenderer.DRAW_STEP,
+    );
+
+    // Single uniform random variable per line
+    this.noise.borderEdgeLeft = this.lines.map(() =>
+      Math.round(this.random() * this.backgroundBorderNoise),
+    );
+    this.noise.borderEdgeRight = this.lines.map(() =>
+      Math.round(this.random() * this.backgroundBorderNoise),
+    );
+    this.noise.shadowDiagonal = this.lines.map(() =>
+      Math.round((this.random() - 0.5) * this.shadowDiagonalEdgeNoise),
+    );
+    this.noise.waveXOffset = this.lines.map(() =>
+      Math.round((this.random() - 0.5) * EtchRenderer.WAVE_X_NOISE_RANGE),
+    );
+    // 1D Perlin noise per line (1 value for each draw step)
+    // TODO: Edge noise with perlin
+    this.noise.yOffset = this.lines.map(() =>
+      [...Array(numXSteps).keys()].map(
+        () => (this.random() - 0.5) * EtchRenderer.LINE_Y_NOISE_RANGE,
+      ),
+    );
+    this.noise.lineWidth = this.lines.map(() =>
+      [...Array(numXSteps).keys()].map(
+        () => (this.random() - 0.5) * EtchRenderer.LINE_WIDTH_NOISE_RANGE,
+      ),
+    );
+    // Uniform random variable per draw step
+    this.noise.lightness = this.lines.map(() =>
+      [...Array(numXSteps).keys()].map(() =>
+        Math.round((this.random() - 0.5) * EtchRenderer.LIGHTNESS_NOISE_RANGE),
+      ),
+    );
+    // This could also be saved as the uniform variable and check the threshold in draw
+    this.noise.lineBreaks = this.lines.map(() =>
+      [...Array(numXSteps).keys()].map(
+        () => this.random() < EtchRenderer.PROB_LINE_BREAK,
+      ),
+    );
   }
 
   generateLines() {
@@ -109,38 +176,39 @@ export class EtchRenderer {
         // lengthNoiseTable: [], // What segments have length noise applied, and how much
       });
     }
+  }
 
-    if (this.hasShadowDiagonal) {
-      this.generateShadowDiagonalEdge();
+  clear() {
+    // Resets the lines for the next animation frame
+    this.layers = [];
+
+    for (const line of this.lines) {
+      line.segmets = [];
     }
+
+    this.addBackground();
   }
 
   generateShadowDiagonalEdge() {
-    this.shadowDiagonalNoiseTable = this.lines.map(() =>
-      Math.round((this.random() - 0.5) * this.shadowDiagonalEdgeNoise),
-    );
     this.shadowDiagonalLocations = this.lines.map((line) =>
       this.getShadowCrossingForLine(line),
     );
-    console.log(this.shadowDiagonalXOrigin, this.shadowDiagonalLocations);
   }
 
   setBackgroundBorderNoise(noise) {
     // TODO: Assert positive
-    // Must be called before setBackground
     this.backgroundBorderNoise = noise;
   }
 
-  setBackground(background) {
+  addBackground() {
     // TODO: Currently, this must be called first. Should the background be separate to layers?
-    this.background = background;
     // For each line, we will add a segment for the background colour
     for (const line of this.lines) {
       let leftOffset = 0;
       let rightOffset = 0;
       if (this.backgroundBorderNoise) {
-        leftOffset = Math.round(this.random() * this.backgroundBorderNoise);
-        rightOffset = Math.round(this.random() * this.backgroundBorderNoise);
+        leftOffset = this.noise.borderEdgeLeft[line.id];
+        rightOffset = this.noise.borderEdgeRight[line.id];
       }
 
       this.addSegment(
@@ -235,41 +303,45 @@ export class EtchRenderer {
   addEdgeNoise(startX, endX, layerId, lineId) {
     const leftEdgeNoise = this.layers[layerId].leftEdgeNoise;
     const rightEdgeNoise = this.layers[layerId].rightEdgeNoise;
+
+    const cachedNoise = this.noise.layerEdge[lineId]
+      ? this.noise.layerEdge[lineId][layerId]
+      : undefined;
+
     if (leftEdgeNoise) {
       // Check whether we have a previous left edge noise value on this line
-      const cachedValue = this.edgeNoiseTable.filter(
-        (v) => v.layerId == layerId && v.lineId == lineId && v.edge == "left",
-      );
-      if (cachedValue.length) {
-        startX += cachedValue[0].offset;
+      if (cachedNoise?.left) {
+        startX += cachedNoise.left;
       } else {
         const offset = Math.round((this.random() - 0.5) * leftEdgeNoise);
         startX += offset;
-        this.edgeNoiseTable.push({
-          layerId,
-          lineId,
-          edge: "left",
-          offset,
-        });
+        // Save the value to the noise cache
+        if (!this.noise.layerEdge[lineId]) {
+          this.noise.layerEdge[lineId] = [];
+        }
+        if (!this.noise.layerEdge[lineId][layerId]) {
+          this.noise.layerEdge[lineId][layerId] = {};
+        }
+        this.noise.layerEdge[lineId][layerId].left = offset;
       }
     }
 
     if (rightEdgeNoise) {
       // Check whether we have a previous right edge noise value on this line
-      const cachedValue = this.edgeNoiseTable.filter(
-        (v) => v.layerId == layerId && v.lineId == lineId && v.edge == "right",
-      );
-      if (cachedValue.length) {
-        endX += cachedValue[0].offset;
+      if (cachedNoise?.right) {
+        endX += cachedNoise.right;
       } else {
         const offset = Math.round((this.random() - 0.5) * rightEdgeNoise);
         endX += offset;
-        this.edgeNoiseTable.push({
-          layerId,
-          lineId,
-          edge: "right",
-          offset,
-        });
+
+        // Save the value to the noise cache
+        if (!this.noise.layerEdge[lineId]) {
+          this.noise.layerEdge[lineId] = [];
+        }
+        if (!this.noise.layerEdge[lineId][layerId]) {
+          this.noise.layerEdge[lineId][layerId] = {};
+        }
+        this.noise.layerEdge[lineId][layerId].right = offset;
       }
     }
 
@@ -277,9 +349,9 @@ export class EtchRenderer {
   }
 
   draw() {
-    console.log("Drawing to canvas");
-    console.log(this.layers);
-    console.log(this.lines);
+    //console.log("Drawing to canvas");
+    //console.log(this.layers);
+    //console.log(this.lines);
     // For testing, we are only going to draw one line at y=200
     for (const line of this.lines) {
       this.drawLine(line);
@@ -319,7 +391,7 @@ export class EtchRenderer {
 
   drawSegment(x1, x2, line, segment) {
     // Set up to draw the first point of the line
-    let yOffset = this.getWaveYOffset(x1, segment);
+    let yOffset = this.getWaveYOffset(x1, segment, line);
     this.context.beginPath();
     this.context.moveTo(x1, line.y + yOffset);
 
@@ -330,11 +402,11 @@ export class EtchRenderer {
       if (currentX > x1) {
         // Get the parameters for the next line section
         const [colour, lineWidth, lineBreak] = this.getStrokeParameters(
-          x1,
+          currentX,
           segment,
           line,
         );
-        yOffset = this.getWaveYOffset(currentX, segment);
+        yOffset = this.getWaveYOffset(currentX, segment, line);
 
         // Draw the current line section
 
@@ -361,9 +433,9 @@ export class EtchRenderer {
     }
 
     // Get the parameters for the final line section
-    yOffset = this.getWaveYOffset(x2, segment);
+    yOffset = this.getWaveYOffset(x2, segment, line);
     const [colour, lineWidth, lineBreak] = this.getStrokeParameters(
-      x1,
+      currentX,
       segment,
       line,
     );
@@ -379,18 +451,19 @@ export class EtchRenderer {
   }
 
   getStrokeParameters(x1, segment, line) {
-    //TODO: Pull from tables
+    const xDrawStep = Math.floor(x1 / EtchRenderer.DRAW_STEP);
+
     // Get the final colour of the section
     const colour = this.getStrokeColour(x1, segment, line);
 
     // Get the custom line width of the layer
     const layer = this.layers[segment.layerId] || undefined;
     let lineWidth = layer?.lineWidth || this.defaultLineWidth;
-    const lineWidthNoise =
-      (this.random() - 0.5) * EtchRenderer.LINE_WIDTH_NOISE_RANGE;
+    const lineWidthNoise = this.noise.lineWidth[line.id][xDrawStep];
     lineWidth += lineWidthNoise;
+
+    // Apply the background line width gradient
     if (segment.isBackground) {
-      // Apply the background line width gradient
       lineWidth *=
         ((line.id + 1) / this.lines.length) *
           (this.backgroundLineWidthGradientDown - 1) +
@@ -399,7 +472,7 @@ export class EtchRenderer {
 
     // Decide whether to add a line break at the current point
     // TODO: More line breaks in the background?
-    const lineBreak = this.random() < EtchRenderer.PROB_LINE_BREAK;
+    const lineBreak = this.noise.lineBreaks[line.id][xDrawStep];
 
     return [colour, lineWidth, lineBreak];
   }
@@ -437,23 +510,30 @@ export class EtchRenderer {
   }
 
   getStrokeColour(x1, segment, line) {
+    const xDrawStep = Math.floor(
+      // TODO: Find a cleaner way to do this. Maybe a function, or store the value of bounding client
+      // TODO: Does this work as intended?
+      x1 / EtchRenderer.DRAW_STEP,
+    );
     // Get the colour of the segment
     let colour = this.getColourOfSegment(segment);
 
     // Apply the shadow diagonal if needed
     if (this.isInShadow(x1, line) && !segment.isBackground) {
-      colour = this.dark2;
+      colour = this.colours.dark2;
     }
 
     // Apply lightness noise
-    return this.addLightnessNoise(colour);
+    const lightnessNoise = this.noise.lightness[line.id][xDrawStep];
+    const light = Math.min(Math.max(colour.light + lightnessNoise, 0), 100);
+    return `hsl(${colour.hue}, ${colour.sat}%, ${light}%)`;
     // TODO: More lightness noise in the shadow region?
   }
 
   getColourOfSegment(segment) {
     let colour;
     if (segment.isBackground) {
-      colour = this.background;
+      colour = this.colours.background;
     } else {
       colour = this.layers[segment.layerId].fill;
     }
@@ -467,7 +547,7 @@ export class EtchRenderer {
     if (this.hasShadowDiagonal) {
       if (
         (this.shadowDiagonalDirection == "left" && x < shadowDiagonalX) ||
-        (this.shadowDiagonalDirection == "right" && x >= shadowDiagonalX)
+        (this.shadowDiagonalDirection == "right" && x > shadowDiagonalX)
       ) {
         return true;
       }
@@ -485,7 +565,7 @@ export class EtchRenderer {
       this.shadowDiagonalXOrigin;
 
     // Apply the shadow diagonal edge noise for this line
-    shadowX += this.shadowDiagonalNoiseTable[line.id];
+    shadowX += this.noise.shadowDiagonal[line.id];
     shadowX = Math.round(shadowX);
 
     shadowX = Math.max(
@@ -494,14 +574,6 @@ export class EtchRenderer {
     );
 
     return shadowX;
-  }
-
-  addLightnessNoise(colour) {
-    const lightnessNoise = Math.round(
-      (this.random() - 0.5) * EtchRenderer.LIGHTNESS_NOISE_RANGE,
-    );
-    const light = Math.min(Math.max(colour.light + lightnessNoise, 0), 100);
-    return `hsl(${colour.hue}, ${colour.sat}%, ${light}%)`;
   }
 
   getAffectedLines(startY, endY) {
@@ -585,7 +657,28 @@ export class EtchRenderer {
     segments.sort((a, b) => a.startX - b.startX);
   }
 
-  getWaveYOffset(x, segment) {
+  calculateBaseYOffset() {
+    // Precalculates the values of sine at each draw step point to save time
+    // These values are used when there is not a custom wave period for the layer
+
+    const numXSteps = Math.ceil(
+      this.canvas.getBoundingClientRect().width / EtchRenderer.DRAW_STEP,
+    );
+
+    for (const line of this.lines) {
+      const waveXNoise = this.noise.waveXOffset[line.id];
+      const yOffsets = [...Array(numXSteps).keys()].map((step) =>
+        Math.sin(
+          ((step * EtchRenderer.DRAW_STEP + waveXNoise) * 2 * Math.PI) /
+            this.defaultWavePeriod,
+        ),
+      );
+      this.baseYOffset[line.id] = yOffsets;
+    }
+  }
+
+  getWaveYOffset(x, segment, line) {
+    const xDrawStep = Math.floor(x / EtchRenderer.DRAW_STEP);
     // Returns the y-offset to be applied at the specified x
     // To add the wave defined by wavePeriod and waveAmplitude
     let wavePeriod = this.defaultWavePeriod;
@@ -593,18 +686,24 @@ export class EtchRenderer {
 
     const layer = this.layers[segment.layerId] || undefined;
 
+    // TODO: Make this smoother - i.e. continious noise would be better. Same goes for edge noise
+    const yNoise = this.noise.yOffset[line.id][xDrawStep];
+
     if (layer) {
       // Check whether custom wave parameters exist for this layer
       wavePeriod = layer.wavePeriod || wavePeriod;
       waveAmplitude = layer.waveAmplitude || waveAmplitude;
     }
 
-    // TODO: Should this be uniform for the whole line?
+    if (wavePeriod == this.defaultWavePeriod) {
+      // We can use the precalculated values
+      return this.baseYOffset[line.id][xDrawStep] * waveAmplitude * yNoise;
+    }
+
+    // If there is a custom wave period, calculate using sine.
     // Add some noise that shifts the waves left or right
     // This does not change the start or end x values of the line segment
-    const waveXNoise = (this.random() - 0.5) * EtchRenderer.WAVE_X_NOISE_RANGE;
-    // TODO: Make this smoother - i.e. continious noise would be better. Same goes for edge noise
-    const yNoise = (this.random() - 0.5) * EtchRenderer.LINE_Y_NOISE_RANGE;
+    const waveXNoise = this.noise.waveXOffset[line.id];
 
     return (
       Math.sin(((x + waveXNoise) * 2 * Math.PI) / wavePeriod) * waveAmplitude +
