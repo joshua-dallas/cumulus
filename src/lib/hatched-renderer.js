@@ -370,14 +370,16 @@ export class HatchedRenderer {
     return [startX, endX];
   }
 
+  // The random value is cached, and scaled by range each time it is used. The
+  // range can change (it shrinks with the cloud while it grows), but the noise
+  // stays the same. An unset entry is undefined: 0 is a valid cached value
   getCachedEdgeOffset(offsets, lineId, range) {
-    // Compare against undefined, not truthiness: an offset of 0 is a valid cached value
-    let offset = offsets[lineId];
-    if (offset === undefined) {
-      offset = Math.round((this.random() - 0.5) * range);
-      offsets[lineId] = offset;
+    let unitNoise = offsets[lineId];
+    if (unitNoise === undefined) {
+      unitNoise = this.random() - 0.5;
+      offsets[lineId] = unitNoise;
     }
-    return offset;
+    return Math.round(unitNoise * range);
   }
 
   draw() {

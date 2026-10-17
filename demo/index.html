@@ -14,7 +14,14 @@
         <h1 class="mt-2 text-4xl font-semibold">Cumulus Demo</h1>
       </header>
       <section class="overflow-auto rounded-lg bg-white p-4 shadow-xl">
-        <cumulus-canvas id="c1" width="600" height="400"></cumulus-canvas>
+        <cumulus-canvas
+          id="c1"
+          width="600"
+          height="400"
+          growIn
+          regenerateOnClick
+        ></cumulus-canvas>
+        <p class="mt-2 text-sm text-slate-500">Click the cloud to make a new one.</p>
       </section>
     </main>
     <script type="module">

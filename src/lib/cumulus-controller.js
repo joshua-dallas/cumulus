@@ -2,6 +2,11 @@ import { CloudBuilder } from "./cloud-builder.js";
 import { CloudSimulation } from "./cloud-simulation.js";
 import { HatchedRenderer } from "./hatched-renderer.js";
 import { createTheme } from "./theme.js";
+import { clamp01, easeInOutCubic, easeOutCubic } from "./easing.js";
+
+// The longest time one frame can advance the animations by. A paused or
+// background tab would otherwise jump straight to the end when it resumes
+const MAX_FRAME_MS = 100;
 
 // Runs one cloud on one canvas: builds the cloud, turns it into renderer
 // layers, and drives the animation loop. It knows nothing about custom
@@ -9,25 +14,38 @@ import { createTheme } from "./theme.js";
 // config and thrown away with destroy() when that config changes.
 //
 // config: { width, height, numCells, seed, lineWidth, lineSpacing,
-//           animate, theme }
-//   animate: false draws the finished cloud once, with no animation loop
-//            and no mouse interaction (used for prefers-reduced-motion)
+//           animate, growIn, regenerateOnClick, theme,
+//           onSeedChange, randomSeed, now }
+//   animate: false draws the finished cloud once, with no animation loop,
+//            no mouse push and no grow or shrink animation (used for
+//            prefers-reduced-motion)
+//   growIn: the cloud grows from nothing when it is created
+//   regenerateOnClick: clicking the cloud shrinks it away and grows a new
+//            one, with a new random seed. Without animation the new cloud
+//            replaces it immediately
+//   onSeedChange(seed): called when a click gives the cloud a new seed
+//   randomSeed(): picks the seed for a new cloud. now(): the clock, in ms
 //
-// TODO: Grow-in animation, sunset mode and click to regenerate belong here
+// The cloud is grown and shrunk by scaling it about the middle of its base
+// (see scaleX/scaleY), not by changing the cloud itself, so the cloud built
+// from a seed is the same at every size.
+//
+// TODO: Morph straight from the old cloud to the new one on click, without
+// shrinking away first
+// TODO: Sunset mode belongs here
 
 export class CumulusController {
   constructor(canvas, config) {
     this.canvas = canvas;
+    this.config = config;
     this.animate = config.animate ?? true;
+    this.growIn = this.animate && (config.growIn ?? false);
+    this.regenerateOnClick = config.regenerateOnClick ?? false;
     this.theme = config.theme ?? createTheme();
+    this.now = config.now ?? (() => performance.now());
+    this.randomSeed = config.randomSeed ?? (() => Math.floor(Math.random() * 1e6));
 
-    this.builder = new CloudBuilder(
-      config.width,
-      config.height,
-      config.numCells,
-      config.seed,
-    );
-    this.simulation = new CloudSimulation(this.builder, config.seed);
+    this.buildCloud(config.seed);
 
     this.renderer = new HatchedRenderer(
       canvas,
@@ -46,20 +64,71 @@ export class CumulusController {
     this.frameId = null;
     this.tick = this.tick.bind(this); // Bound once, rather than every frame
 
+    // How big the cloud is, from 0 (nothing) to 1 (full size), and what it is
+    // doing. A cloud that is not growing, shrinking or about to be replaced is "idle"
+    this.scale = 1;
+    this.phase = "idle"; // "idle", "growing" or "shrinking"
+    this.phaseTime = 0; // ms spent in the current phase
+    this.shrinkFrom = 1; // the scale the shrink started from
+    this.nextSeed = null; // the seed of the cloud that will replace this one
+    this.lastTime = this.now();
+    if (this.growIn) this.startGrowing();
+
     // Cursor position relative to the canvas, or null when it is not over it
     this.cursor = null;
     this.onMouseMove = (event) => {
-      const rect = this.canvas.getBoundingClientRect();
-      this.cursor = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      this.cursor = this.canvasPoint(event);
+      if (this.regenerateOnClick) {
+        const over = this.isOverCloud(this.cursor.x, this.cursor.y);
+        this.canvas.style.cursor = over ? "pointer" : "";
+      }
     };
-    this.onMouseLeave = () => (this.cursor = null);
-    if (this.animate) {
+    this.onMouseLeave = () => {
+      this.cursor = null;
+      this.canvas.style.cursor = "";
+    };
+    this.onClick = (event) => {
+      const point = this.canvasPoint(event);
+      if (this.isOverCloud(point.x, point.y)) this.regenerate();
+    };
+    if (this.animate || this.regenerateOnClick) {
       this.canvas.addEventListener("mousemove", this.onMouseMove);
       this.canvas.addEventListener("mouseleave", this.onMouseLeave);
+    }
+    if (this.regenerateOnClick) {
+      this.canvas.addEventListener("click", this.onClick);
     }
 
     this.drawFrame();
     this.updateLoop();
+  }
+
+  // Creates the cloud for a seed, and the simulation that moves it
+  buildCloud(seed) {
+    const { width, height, numCells } = this.config;
+    this.seed = seed;
+    this.builder = new CloudBuilder(width, height, numCells, seed);
+    this.simulation = new CloudSimulation(this.builder, seed);
+
+    // The cloud grows and shrinks about the middle of its base
+    this.anchor = {
+      x: this.builder.dome.x,
+      y: Math.max(...this.builder.cells.map((cell) => cell.y + cell.radius)),
+    };
+  }
+
+  canvasPoint(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  // Whether a point (in canvas pixels) is over one of the cells of the cloud
+  isOverCloud(x, y) {
+    return this.builder.cells.some((cell) => {
+      const dx = x - this.scaleX(cell.x);
+      const dy = y - this.scaleY(cell.y);
+      return dx * dx + dy * dy <= (cell.radius * this.scale) ** 2;
+    });
   }
 
   // Stops the loop and removes listeners. The controller cannot be reused.
@@ -68,6 +137,81 @@ export class CumulusController {
     this.updateLoop();
     this.canvas.removeEventListener("mousemove", this.onMouseMove);
     this.canvas.removeEventListener("mouseleave", this.onMouseLeave);
+    this.canvas.removeEventListener("click", this.onClick);
+    this.canvas.style.cursor = "";
+  }
+
+  //----------------------------------------------------//
+  // Growing, shrinking and replacing the cloud
+  //----------------------------------------------------//
+
+  // Replaces the cloud with a new one. By default the old cloud shrinks away
+  // first, and then the new one grows. Without animation, it is instant.
+  regenerate(seed = this.randomSeed()) {
+    if (this.phase === "shrinking" || this.destroyed) return;
+
+    if (!this.animate) {
+      this.replaceCloud(seed);
+      this.redraw();
+      return;
+    }
+
+    this.phase = "shrinking";
+    this.phaseTime = 0;
+    this.shrinkFrom = this.scale; // clicked while growing: shrink from where it is
+    this.nextSeed = seed;
+  }
+
+  startGrowing() {
+    this.phase = "growing";
+    this.phaseTime = 0;
+    this.scale = 0;
+  }
+
+  replaceCloud(seed) {
+    this.buildCloud(seed);
+    this.config.onSeedChange?.(seed);
+  }
+
+  // Moves the grow or shrink animation on by dt ms. Returns true if the size changed
+  advanceAnimation(dt) {
+    if (this.phase === "idle") return false;
+
+    const { growDuration, shrinkDuration } = this.theme.animation;
+    this.phaseTime += dt;
+
+    if (this.phase === "growing") {
+      const progress = clamp01(this.phaseTime / growDuration);
+      this.scale = easeOutCubic(progress);
+      if (progress >= 1) this.phase = "idle";
+    } else {
+      const progress = clamp01(this.phaseTime / shrinkDuration);
+      this.scale = this.shrinkFrom * (1 - easeInOutCubic(progress));
+      if (progress >= 1) {
+        // Nothing is left to see: swap in the new cloud and grow it
+        this.replaceCloud(this.nextSeed);
+        this.startGrowing();
+      }
+    }
+    return true;
+  }
+
+  // How much of the fractals (the fluff) have appeared. They lag behind the
+  // bodies of the cells, appearing once the cloud has mostly grown
+  fractalScale() {
+    if (this.scale >= 1) return 1; // exactly, so a finished cloud is never rounded
+    const { fractalStart } = this.theme.animation;
+    const progress = clamp01((this.scale - fractalStart) / (1 - fractalStart));
+    return this.scale * easeInOutCubic(progress);
+  }
+
+  // Maps a point of the full size cloud to its place at the current size
+  scaleX(x) {
+    return this.scale === 1 ? x : this.anchor.x + (x - this.anchor.x) * this.scale;
+  }
+
+  scaleY(y) {
+    return this.scale === 1 ? y : this.anchor.y + (y - this.anchor.y) * this.scale;
   }
 
   setInView(inView) {
@@ -85,6 +229,7 @@ export class CumulusController {
       this.animate && this.inView && this.pageVisible && !this.destroyed;
 
     if (shouldRun && this.frameId === null) {
+      this.lastTime = this.now(); // time spent paused does not count
       this.frameId = requestAnimationFrame(this.tick);
     } else if (!shouldRun && this.frameId !== null) {
       cancelAnimationFrame(this.frameId);
@@ -95,13 +240,21 @@ export class CumulusController {
   tick() {
     this.frameId = requestAnimationFrame(this.tick);
 
-    // Fills and the picture only need updating if the simulation moved something
-    if (this.simulation.step(this.cursor)) {
-      this.builder.updateFills();
-      this.renderer.clearCanvas();
-      this.renderer.clear();
-      this.drawFrame();
-    }
+    const time = this.now();
+    const dt = Math.min(time - this.lastTime, MAX_FRAME_MS);
+    this.lastTime = time;
+
+    // Fills and the picture only need updating if something moved or changed size
+    const resized = this.advanceAnimation(dt);
+    const moved = this.simulation.step(this.cursor);
+    if (moved) this.builder.updateFills();
+    if (moved || resized) this.redraw();
+  }
+
+  redraw() {
+    this.renderer.clearCanvas();
+    this.renderer.clear();
+    this.drawFrame();
   }
 
   //----------------------------------------------------//
@@ -109,30 +262,33 @@ export class CumulusController {
   //----------------------------------------------------//
 
   drawFrame() {
-    const styles = this.resolveLayerStyles();
+    // Layers are drawn in the order they are added: fills, then cells on top.
+    // There is nothing to add for a cloud that has not started to grow
+    if (this.scale > 0) this.addCloudLayers();
+    this.renderer.draw();
+  }
 
-    // Layers are drawn in the order they are added: fills, then cells on top
+  addCloudLayers() {
+    const styles = this.resolveLayerStyles();
+    const fractalScale = this.fractalScale();
+
+    // Noise and padding are sizes in pixels. They shrink with the cloud, or
+    // they would swallow a small one
+    const bodyStyles = this.scaleStyles(styles, this.scale);
+    const fractalStyles = this.scaleStyles(styles, fractalScale);
+
     this.builder.fillCircles.forEach((circle, i) =>
-      this.addFillCircleLayer(circle, `fill-${i}`, styles.fillCircle),
+      this.addFillCircleLayer(circle, `fill-${i}`, bodyStyles.fillCircle),
     );
     this.builder.horizontalFillCircles.forEach((circle, i) =>
-      this.addFillCircleLayer(circle, `horizontal-fill-${i}`, styles.fillCircle),
+      this.addFillCircleLayer(circle, `horizontal-fill-${i}`, bodyStyles.fillCircle),
     );
-    this.renderer.addRightAnglePolygonLayer({
-      ...styles.innerLeft,
-      key: "inner-left",
-      vertices: this.builder.cloudInnerLeft,
-    });
-    this.renderer.addRightAnglePolygonLayer({
-      ...styles.innerRight,
-      key: "inner-right",
-      vertices: this.builder.cloudInnerRight,
-    });
-    for (const cell of this.builder.cells) {
-      this.addCloudCellLayers(cell, styles);
-    }
+    this.addInnerLayer("inner-left", this.builder.cloudInnerLeft, bodyStyles.innerLeft);
+    this.addInnerLayer("inner-right", this.builder.cloudInnerRight, bodyStyles.innerRight);
 
-    this.renderer.draw();
+    for (const cell of this.builder.cells) {
+      this.addCloudCellLayers(cell, bodyStyles, fractalStyles, fractalScale);
+    }
   }
 
   // Layer styles in the theme refer to colours by name. Resolve them each frame
@@ -145,39 +301,71 @@ export class CumulusController {
     return styles;
   }
 
+  // The styles with their pixel sizes (noise and padding) multiplied by scale
+  scaleStyles(styles, scale) {
+    if (scale === 1) return styles;
+
+    const scaled = {};
+    for (const [name, style] of Object.entries(styles)) {
+      scaled[name] = { ...style };
+      for (const size of ["leftEdgeNoise", "rightEdgeNoise", "leftPadding", "rightPadding"]) {
+        if (style[size]) scaled[name][size] = style[size] * scale;
+      }
+    }
+    return scaled;
+  }
+
+  addInnerLayer(key, vertices, style) {
+    this.renderer.addRightAnglePolygonLayer({
+      ...style,
+      key,
+      vertices: vertices.map((vertex) => ({
+        ...vertex,
+        x: this.scaleX(vertex.x),
+        y: this.scaleY(vertex.y),
+      })),
+    });
+  }
+
   // Layer keys identify a shape between frames. The renderer uses them to
   // keep each shape's edge noise stable, so they must not depend on draw order
-  addCloudCellLayers(cell, styles) {
+  addCloudCellLayers(cell, styles, fractalStyles, fractalScale) {
+    const x = this.scaleX(cell.x);
+    const y = this.scaleY(cell.y);
+
     // Add the main cell first
     this.renderer.addCircleLayer({
       ...styles.cell,
       key: `cell-${cell.id}`,
-      x: cell.x,
-      y: cell.y,
-      radius: cell.radius,
+      x,
+      y,
+      radius: cell.radius * this.scale,
       specialType: "cloud-cell",
     });
 
-    // Then all of its fractals, which were grouped by cell when the cloud was built
+    // Then all of its fractals, which were grouped by cell when the cloud was built.
+    // They are placed relative to their cell, and scaled about its centre
+    if (fractalScale <= 0) return;
+
     cell.darkFractals.forEach((fractal, i) => {
       this.renderer.addCircleLayer({
-        ...styles.darkFractal,
+        ...fractalStyles.darkFractal,
         key: `dark-fractal-${cell.id}-${i}`,
-        x: cell.x + fractal.x,
-        y: cell.y + fractal.y,
-        radius: fractal.radius,
+        x: x + fractal.x * fractalScale,
+        y: y + fractal.y * fractalScale,
+        radius: fractal.radius * fractalScale,
         specialType: "dark-fractal",
       });
     });
 
     cell.lightFractals.forEach((fractal, i) => {
       this.renderer.addCircleLayer({
-        ...styles.lightFractal,
+        ...fractalStyles.lightFractal,
         key: `light-fractal-${cell.id}-${i}`,
-        x: cell.x + fractal.x,
-        y: cell.y + fractal.y,
-        radius: fractal.radius,
-        rightPadding: fractal.rightPadding,
+        x: x + fractal.x * fractalScale,
+        y: y + fractal.y * fractalScale,
+        radius: fractal.radius * fractalScale,
+        rightPadding: fractal.rightPadding * fractalScale,
         specialType: "light-fractal",
       });
     });
@@ -187,9 +375,9 @@ export class CumulusController {
     this.renderer.addCircleLayer({
       ...style,
       key,
-      x: circle.x,
-      y: circle.y,
-      radius: circle.radius,
+      x: this.scaleX(circle.x),
+      y: this.scaleY(circle.y),
+      radius: circle.radius * this.scale,
     });
   }
 }

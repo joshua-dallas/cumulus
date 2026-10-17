@@ -28,6 +28,14 @@ Changing an attribute rebuilds the cloud. Attribute names are case-insensitive i
 | `seed`        | 5       | Seed for the generator                           |
 | `lineWidth`   | 1       | Hatch line thickness                             |
 | `lineSpacing` | 1.5     | Gap between hatch lines                          |
+| `growIn`      | off     | The cloud grows from nothing when the element is first created |
+| `regenerateOnClick` | off | Clicking the cloud shrinks it away and grows a new one (new random seed) |
+
+`growIn` and `regenerateOnClick` are on when the attribute is present and off when it is missing or set to `false`. A resize rebuild does not replay the grow-in, and a cloud made by clicking keeps its seed through a rebuild until the `seed` attribute is changed. With `prefers-reduced-motion`, `growIn` does nothing and a click replaces the cloud instantly.
+
+```html
+<cumulus-canvas width="600" height="400" growIn regenerateOnClick></cumulus-canvas>
+```
 
 Moving the mouse over the cloud nudges cells sideways out of its way.
 
@@ -62,9 +70,11 @@ Tests use Node's built-in runner and run without a browser. The custom element i
 ### Requested features
 
 - [x] **Rebuild on attribute change** – `observedAttributes` / `attributeChangedCallback`, `ResizeObserver`, `disconnectedCallback` cleanup, all through one `rebuild()`.
-- [ ] **Grow-in animation** – on first load, grow the clouds from nothing (cells scale up from their base, fractals billow outwards).
+- [x] **Grow-in animation** – `growIn` attribute. The cloud is scaled up from the middle of its base with an ease-out curve, and the fractals (fluff) appear later than the cell bodies.
 - [ ] **Sunset mode** – slowly shift the palette (sky, cloud lit/shadow colours) and rotate the shadow diagonal angle/origin to mimic a sunset timelapse. (The theme object and `applyTheme` are in place for this.)
-- [ ] **Click to regenerate** – click the clouds to replace them with a new seed (optionally shrink out, then grow in) to show they are generative.
+- [x] **Click to regenerate** – `regenerateOnClick` attribute. The cloud shrinks away, then a new one (new random seed) grows.
+- [ ] **Morph on click** – try morphing the old cloud into the new one on click, without shrinking away first.
+- [ ] **More realistic growth** – growth is currently a uniform scale about the base; cells could grow at different times, rise and billow individually.
 - [ ] **More realistic clouds** – shade by light direction, and make growth, rising, drift and dissipation behave more like real cumulus. (Fills are rendered again.)
 - [ ] **Lighter on the CPU** – see below.
 

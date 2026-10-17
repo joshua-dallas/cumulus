@@ -136,6 +136,19 @@ test("edge noise is remembered per layer key, including an offset of 0", () => {
   assert.equal(draws, drawsAfterFirst);
 });
 
+test("edge noise scales with its range without being rolled again", () => {
+  const { renderer } = setup();
+  let draws = 0;
+  renderer.random = () => (draws++, 0.9); // a noise value of +0.4 of the range
+  const layer = { id: 0, key: "cell-1", rightEdgeNoise: 10 };
+
+  assert.deepEqual(renderer.addEdgeNoise(10, 20, layer, 0), [10, 24]);
+  // The same layer while the cloud is small has a smaller range: same noise, smaller offset
+  const small = { ...layer, rightEdgeNoise: 5 };
+  assert.deepEqual(renderer.addEdgeNoise(10, 20, small, 0), [10, 22]);
+  assert.equal(draws, 1);
+});
+
 test("clear() empties every line and puts the background back", () => {
   const { renderer, line } = setup();
   addLayer(renderer, line, 40, 60, {});

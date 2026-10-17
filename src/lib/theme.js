@@ -4,6 +4,7 @@
 //   (see `fill` below), so changing a colour here, or at runtime for a sunset,
 //   restyles every layer that uses it.
 // - background / shadowDiagonal: applied to the renderer (HatchedRenderer.applyTheme).
+// - animation: durations of the grow and shrink animations.
 // - layers: the style of each kind of shape. Noise values are "plus or minus
 //   this many pixels"; padding shifts the edge of the neighbouring segment.
 //
@@ -28,6 +29,15 @@ export const defaultTheme = {
     angle: (5 * Math.PI) / 6, // From the bottom x-axis
     xOriginRatio: 0.7, // Where the diagonal meets the bottom of the canvas, as a ratio of the width
     edgeNoise: 30,
+  },
+
+  // Timings and shape of the grow and shrink animations
+  animation: {
+    growDuration: 3200, // ms for a new cloud to grow from nothing
+    shrinkDuration: 800, // ms for a cloud to shrink away when it is clicked
+    // Fractals (the fluff) lag behind the cell bodies. They start to appear once
+    // the cloud has grown to this fraction of its size, and finish with it
+    fractalStart: 0.35,
   },
 
   layers: {

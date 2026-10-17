@@ -22,7 +22,8 @@ Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`
 | `src/index.js` | Exports the `Cumulus` class (no side effects). |
 | `src/define.js` | Registers `cumulus-canvas` (side-effect entry, listed in `package.json` `sideEffects`). |
 | `src/cumulus.js` | `Cumulus` custom element: DOM only. Shadow root + canvas, attribute parsing, `observedAttributes`, `ResizeObserver`, `IntersectionObserver`, `visibilitychange`, reduced-motion media query. Everything funnels into `rebuild()`. |
-| `src/lib/cumulus-controller.js` | `CumulusController`: runs one cloud on one canvas. Builds builder + simulation + renderer, converts builder shapes into renderer layers (`drawFrame`), owns the rAF loop and mouse tracking. Created per rebuild, discarded with `destroy()`. |
+| `src/lib/cumulus-controller.js` | `CumulusController`: runs one cloud on one canvas. Builds builder + simulation + renderer, converts builder shapes into renderer layers (`drawFrame`), owns the rAF loop, mouse tracking, and the grow/shrink/click-to-regenerate animation. Created per rebuild, discarded with `destroy()`. |
+| `src/lib/easing.js` | `easeOutCubic`, `easeInOutCubic`, `clamp01`. |
 | `src/lib/cloud-builder.js` | `CloudBuilder`: seeded, pure-geometry cloud model. No canvas access. |
 | `src/lib/cloud-simulation.js` | `CloudSimulation`: moves cells/fractals over time (currently the mouse effect; `fractalSim` and `moveCloudCells` exist but are not called). Has its own PRNG. |
 | `src/lib/hatched-renderer.js` | `HatchedRenderer`: turns layers into per-scanline segments and strokes them. |
@@ -65,6 +66,16 @@ attributes / resize / reduced-motion change
 
 `updateFills()` recomputes everything derived from cell positions (`createCloudInner`, `fillCentreLineGaps`, horizontal fill circle x). It must be called after cells move, and only then. The controller does this only when `simulation.step()` reports a change.
 
+### Grow, shrink and regenerate (CumulusController)
+
+- The controller has a `scale` (0 to 1) and a `phase` (`idle`, `growing`, `shrinking`). Growing and shrinking scale the *drawn* cloud about the middle of its base (`anchor`, via `scaleX`/`scaleY`); the builder's cloud is never changed, so a seed gives the same cloud at every size. Cells, fills (circles and polygon vertices) scale together. Pixel sizes (edge noise, padding) are scaled by the same factor in `scaleStyles`, or they would swallow a small cloud.
+- Fractals lag the bodies: `fractalScale()` is 0 until `scale` reaches `theme.animation.fractalStart`, then eases in. Their offsets from the cell and their radii use it. At `scale >= 1` it is exactly 1, so a finished cloud is identical to a cloud drawn without animation (there is a test for that).
+- Timing comes from `config.now()` (default `performance.now`) in `tick`, with each frame capped at 100ms so a paused tab does not jump to the end. Durations are in `theme.animation`. Grow uses `easeOutCubic`; shrink uses `easeInOutCubic`.
+- `growIn` plays once, from the constructor. `regenerate(seed)` starts a shrink (from the current scale, so clicking mid-grow works); when it reaches 0 the controller calls `replaceCloud` (`buildCloud` with the new seed, then `config.onSeedChange(seed)`) and grows. Clicks during a shrink are ignored. The renderer is reused, so edge-noise values are kept per layer key.
+- Click and hover (pointer cursor) hit-test the cells at their current scale. Without `animate` a click replaces the cloud immediately.
+- The edge-noise cache stores the unit random value and multiplies by the (scaled) range each use, so noise generated while the cloud is small is right at full size.
+- TODO in the source and README: morph from the old cloud to the new one without shrinking first.
+
 ### CloudSimulation
 
 `step(cursor)` runs each stage and returns true if anything changed. Currently only `moveCellsWithMouse`: pushes cells horizontally out of `cursor` range (max shift 30px, eased back to `sim.baseLocation`). `cursor` is `{x, y}` or `null` (no cursor).
@@ -92,10 +103,11 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 
 ### Cumulus element
 
-- Observed attributes (lower-case, as HTML lower-cases them): `width` (500), `height` (500), `numCells` (15), `seed` (5), `lineWidth` (1), `lineSpacing` (1.5). `seed="0"` is valid; non-numeric values fall back to the default; `numCells` is at least 1.
+- Observed attributes (lower-case, as HTML lower-cases them): `width` (500), `height` (500), `numCells` (15), `seed` (5), `lineWidth` (1), `lineSpacing` (1.5), and the booleans `growIn` and `regenerateOnClick` (off by default; present = on unless `false`/`0`/`off`/`no`). `seed="0"` is valid; non-numeric values fall back to the default; `numCells` is at least 1.
 - Size: `width`/`height` attributes win; a missing dimension takes the element's CSS size (measured with the canvas collapsed so its old size isn't mistaken for the CSS size); otherwise the default. A `ResizeObserver` triggers a debounced rebuild when the measured size changes.
 - Pause: `IntersectionObserver` (off-screen) and `visibilitychange` (hidden tab) call `controller.setInView / setPageVisible`; the loop is cancelled while either is false.
 - `prefers-reduced-motion: reduce` → `animate: false`: the controller draws the finished cloud once, starts no loop and attaches no mouse listeners. A change of the preference rebuilds.
+- `growIn` only applies to the first build (`hasBuilt`), so resize rebuilds do not replay it. A cloud made by clicking reports its seed through `onSeedChange`; the element keeps it in `seedOverride` so a rebuild keeps the same cloud, until the `seed` attribute changes.
 - `connectedCallback` sets up observers and builds; `disconnectedCallback` removes them and destroys the controller. The shadow root/canvas are created once and reused on reconnect.
 
 ## Known bugs / gotchas
@@ -124,10 +136,11 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 | `utils.test.js` | PRNG determinism, range maths, `clamp` |
 | `cloud-builder.test.js` | determinism per seed, **golden hash for seed 323** (fails if `random()` call order changes), id lookup, fractal grouping, base locations, fill updates |
 | `cloud-simulation.test.js` | rest, mouse push, limits, return to base |
-| `hatched-renderer.test.js` | `addSegment` overwrite/split, padding as gap segments (full width, persists when covered, shadow), edge-noise cache, `clear()` |
-| `cumulus-controller.test.js` | layer building and keys, animate on/off, pause/resume/destroy, only redraw when something moved, theme |
+| `hatched-renderer.test.js` | `addSegment` overwrite/split, padding as gap segments (full width, persists when covered, shadow), edge-noise cache (including scaling with range), `clear()` |
+| `easing.test.js` | endpoints and monotonic progress of the easing functions |
+| `cumulus-controller.test.js` | layer building and keys, animate on/off, pause/resume/destroy, only redraw when something moved, theme, grow-in (scale, eased progress, fractal lag, no jump after pause, finished cloud identical to a static one), click to regenerate (shrink, new seed, ignored clicks, instant without animation, pointer cursor) |
 
-The `Cumulus` element (`src/cumulus.js`) needs a DOM and is not covered: attribute rebuilds, `ResizeObserver`, `IntersectionObserver` and reduced motion were checked by hand in headless Chrome over the DevTools protocol (`--force-prefers-reduced-motion` for the reduced-motion path; `--virtual-time-budget` does not run animation frames reliably, so use real time).
+The `Cumulus` element (`src/cumulus.js`) needs a DOM and is not covered: attribute rebuilds, the `growIn`/`regenerateOnClick` attributes, `ResizeObserver`, `IntersectionObserver` and reduced motion were checked by hand in headless Chrome over the DevTools protocol (`--force-prefers-reduced-motion` for the reduced-motion path; `--virtual-time-budget` does not run animation frames reliably, so use real time).
 
 If the golden hash test fails after a deliberate change to generation, every existing seed now makes a different cloud: update the hash on purpose. Otherwise a `this.random()` call was added, removed or reordered.
 

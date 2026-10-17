@@ -15,6 +15,12 @@ const RESIZE_DEBOUNCE_MS = 150;
 // attributes, and decides when the cloud must be rebuilt. Everything to do with
 // the cloud itself lives in CumulusController.
 //
+// Optional behaviours, off unless the attribute is present (`growIn`,
+// `regenerateOnClick`; write ="false" to turn one off explicitly):
+//   growIn             the cloud grows from nothing when the element is first
+//                      created (not when it is rebuilt for a resize)
+//   regenerateOnClick  clicking the cloud shrinks it away and grows a new one
+//
 // Sizing: width/height attributes set a fixed size. A dimension without an
 // attribute takes the element's own CSS size (so the cloud can fill its
 // container), falling back to the default if the element has none.
@@ -30,12 +36,16 @@ export class Cumulus extends HTMLElement {
     "seed",
     "linewidth",
     "linespacing",
+    "growin",
+    "regenerateonclick",
   ];
 
   constructor() {
     super();
     this.controller = null;
     this.size = null; // The size the current controller was built with
+    this.hasBuilt = false; // Grow-in only plays the first time
+    this.seedOverride = null; // The seed of a cloud made by clicking, kept across rebuilds
     this.rebuildTimer = null;
     this.inView = true;
     this.reducedMotionQuery = window.matchMedia(
@@ -100,6 +110,7 @@ export class Cumulus extends HTMLElement {
     // Attributes present in the markup are reported before the element is
     // connected. connectedCallback builds from them, so there is nothing to do
     if (oldValue === newValue || !this.controller) return;
+    if (name === "seed") this.seedOverride = null; // the new attribute wins
     this.scheduleRebuild();
   }
 
@@ -119,6 +130,7 @@ export class Cumulus extends HTMLElement {
     const config = this.readConfig();
     this.size = { width: config.width, height: config.height };
     this.controller = new CumulusController(this.canvas, config);
+    this.hasBuilt = true;
     this.controller.setInView(this.inView);
     this.controller.setPageVisible(!document.hidden);
   }
@@ -132,13 +144,17 @@ export class Cumulus extends HTMLElement {
         1,
         Math.floor(this.numberAttribute("numcells", DEFAULTS.numCells)),
       ),
-      seed: this.numberAttribute("seed", DEFAULTS.seed),
+      // A cloud made by clicking keeps its seed if the element is rebuilt (resized)
+      seed: this.seedOverride ?? this.numberAttribute("seed", DEFAULTS.seed),
       lineWidth: this.positiveAttribute("linewidth", DEFAULTS.lineWidth),
       lineSpacing: Math.max(
         0,
         this.numberAttribute("linespacing", DEFAULTS.lineSpacing),
       ),
       animate: !this.reducedMotionQuery.matches,
+      growIn: !this.hasBuilt && this.booleanAttribute("growin"),
+      regenerateOnClick: this.booleanAttribute("regenerateonclick"),
+      onSeedChange: (seed) => (this.seedOverride = seed),
     };
   }
 
@@ -174,6 +190,13 @@ export class Cumulus extends HTMLElement {
     if (raw === null || raw.trim() === "") return fallback;
     const value = Number(raw);
     return Number.isFinite(value) ? value : fallback;
+  }
+
+  // A boolean attribute is on if it is present, unless it says it is not
+  booleanAttribute(name) {
+    const raw = this.getAttribute(name);
+    if (raw === null) return false;
+    return !["false", "0", "off", "no"].includes(raw.trim().toLowerCase());
   }
 
   positiveAttribute(name, fallback) {
