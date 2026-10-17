@@ -1,14 +1,7 @@
-import {
-  getVerticalLinesOfPolygon,
-  intersection,
-  mulberry32,
-  subtractRange,
-} from "./utils";
+import { getVerticalLinesOfPolygon, mulberry32 } from "./utils.js";
 
-// TODO: Watch attribute and trigger re-render
 // TODO: Use typescript and custom types for layer, line and segment
 // TODO: Should I use get/set patterns to trigger re-render?
-// TODO: Persist noise information between re-adding layers
 // TODO: Improve noise behaviour (continious), x wave per line
 // TODO: Line width gradient down background
 // TODO: Padding noise?
@@ -24,7 +17,7 @@ import {
 // - Compute noise once and save
 // - Save y offsets rather than computing each time
 
-export class EtchRenderer {
+export class HatchedRenderer {
   static DRAW_STEP = 2;
   static LIGHTNESS_NOISE_RANGE = 13;
   static PROB_LINE_BREAK = 0.0009;
@@ -32,8 +25,14 @@ export class EtchRenderer {
   static LINE_Y_NOISE_RANGE = 0.4;
   static LINE_WIDTH_NOISE_RANGE = 0.3;
 
-  constructor(canvas, lineWidth = 2, lineSpacing = 2) {
+  // width and height are the logical (CSS pixel) size of the drawing area.
+  // They are passed in, rather than measured from the canvas, so the renderer
+  // does not depend on the canvas being laid out in the DOM.
+  constructor(canvas, width, height, lineWidth = 2, lineSpacing = 2) {
     this.canvas = canvas;
+    this.width = width;
+    this.height = height;
+    this.numXSteps = Math.ceil(width / HatchedRenderer.DRAW_STEP);
 
     // Global styling variables
     // TODO: Create setters
@@ -55,8 +54,7 @@ export class EtchRenderer {
     // Shadow diagonal variables
     // TODO: Create setters
     this.hasShadowDiagonal = true;
-    this.shadowDiagonalXOrigin =
-      this.canvas.getBoundingClientRect().width * 0.7; // TODO: Is there a better way given the resize()?
+    this.shadowDiagonalXOrigin = this.width * 0.7;
     this.shadowDiagonalDirection = "left"; // Shadow to the left side
     this.shadowDiagonalAngle = (5 * Math.PI) / 6;
     this.shadowDiagonalEdgeNoise = 30;
@@ -65,7 +63,9 @@ export class EtchRenderer {
     this.seed = 10; // TODO: Use a random or provided seed
     this.random = mulberry32(this.seed);
     this.noise = {
-      layerEdge: [],
+      // Edge noise is cached per layer key (not layer index) so that it stays
+      // attached to the same shape even if layers are added or removed between frames
+      layerEdge: new Map(), // key -> { left: [per line], right: [per line] }
       shadowDiagonal: [],
       waveXOffset: [],
       borderEdgeLeft: [],
@@ -91,18 +91,36 @@ export class EtchRenderer {
   }
 
   resize() {
-    // TODO: Should this be handled in cumulus?
-    const rect = this.canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio;
+    const dpr = window.devicePixelRatio || 1;
 
-    // Scale for pixel perfect rendering
-    this.canvas.width = rect.width * dpr;
-    this.canvas.height = rect.height * dpr;
+    // Scale for pixel perfect rendering. Assigning canvas.width also resets
+    // the context state, so the scale is applied from a clean transform
+    this.canvas.width = this.width * dpr;
+    this.canvas.height = this.height * dpr;
     this.context.scale(dpr, dpr);
 
     // Set the 'drawn' size of the canvas
-    this.canvas.style.width = `${rect.width}px`;
-    this.canvas.style.height = `${rect.height}px`;
+    this.canvas.style.width = `${this.width}px`;
+    this.canvas.style.height = `${this.height}px`;
+  }
+
+  // Applies the renderer-related parts of a theme (see theme.js).
+  // Must be called before finaliseRenderer(), as the noise depends on these values
+  applyTheme(theme) {
+    this.colours = theme.colours;
+    this.setBackgroundBorderNoise(theme.background.borderNoise);
+
+    const shadow = theme.shadowDiagonal;
+    this.hasShadowDiagonal = shadow.enabled;
+    this.shadowDiagonalXOrigin = this.width * shadow.xOriginRatio;
+    this.shadowDiagonalDirection = shadow.direction;
+    this.shadowDiagonalAngle = shadow.angle;
+    this.shadowDiagonalEdgeNoise = shadow.edgeNoise;
+  }
+
+  // Clears the pixels of the canvas (not the lines/layers, see clear())
+  clearCanvas() {
+    this.context.clearRect(0, 0, this.width, this.height);
   }
 
   finaliseRenderer() {
@@ -117,9 +135,7 @@ export class EtchRenderer {
     // TODO: This needs to be called after all the parameters have been set
     // TODO: Do we only create noise where it is enabled, or do we only apply it if is enabled?
     // Let's create all the noise first
-    const numXSteps = Math.ceil(
-      this.canvas.getBoundingClientRect().width / EtchRenderer.DRAW_STEP,
-    );
+    const numXSteps = this.numXSteps;
 
     // Single uniform random variable per line
     this.noise.borderEdgeLeft = this.lines.map(() =>
@@ -132,40 +148,38 @@ export class EtchRenderer {
       Math.round((this.random() - 0.5) * this.shadowDiagonalEdgeNoise),
     );
     this.noise.waveXOffset = this.lines.map(() =>
-      Math.round((this.random() - 0.5) * EtchRenderer.WAVE_X_NOISE_RANGE),
+      Math.round((this.random() - 0.5) * HatchedRenderer.WAVE_X_NOISE_RANGE),
     );
     // 1D Perlin noise per line (1 value for each draw step)
     // TODO: Edge noise with perlin
     this.noise.yOffset = this.lines.map(() =>
       [...Array(numXSteps).keys()].map(
-        () => (this.random() - 0.5) * EtchRenderer.LINE_Y_NOISE_RANGE,
+        () => (this.random() - 0.5) * HatchedRenderer.LINE_Y_NOISE_RANGE,
       ),
     );
     this.noise.lineWidth = this.lines.map(() =>
       [...Array(numXSteps).keys()].map(
-        () => (this.random() - 0.5) * EtchRenderer.LINE_WIDTH_NOISE_RANGE,
+        () => (this.random() - 0.5) * HatchedRenderer.LINE_WIDTH_NOISE_RANGE,
       ),
     );
     // Uniform random variable per draw step
     this.noise.lightness = this.lines.map(() =>
       [...Array(numXSteps).keys()].map(() =>
-        Math.round((this.random() - 0.5) * EtchRenderer.LIGHTNESS_NOISE_RANGE),
+        Math.round((this.random() - 0.5) * HatchedRenderer.LIGHTNESS_NOISE_RANGE),
       ),
     );
     // This could also be saved as the uniform variable and check the threshold in draw
     this.noise.lineBreaks = this.lines.map(() =>
       [...Array(numXSteps).keys()].map(
-        () => this.random() < EtchRenderer.PROB_LINE_BREAK,
+        () => this.random() < HatchedRenderer.PROB_LINE_BREAK,
       ),
     );
   }
 
   generateLines() {
     // This function generates the objects that are used to store information about each line that is drawn
-    // TODO: Using getBoundingClient feels janky
     const lineHeight = this.defaultLineWidth + this.lineSpacing;
-    const numLines =
-      Math.floor(this.canvas.getBoundingClientRect().height / lineHeight) - 2; // leave a line's space at the top and bottom
+    const numLines = Math.floor(this.height / lineHeight) - 2; // leave a line's space at the top and bottom
     this.lines = [];
     for (let i = 0; i < numLines; i++) {
       this.lines.push({
@@ -173,7 +187,7 @@ export class EtchRenderer {
         y: lineHeight * (i + 1) + this.lineSpacing,
         startX: 0, // TODO: set by the background padding and mask
         //endX: this.canvas.width, // TODO: Something is going wrong here. Need to understand more
-        endX: this.canvas.getBoundingClientRect().width,
+        endX: this.width,
         segments: [], // Information on what to draw is stored here
         // lengthNoiseTable: [], // What segments have length noise applied, and how much
       });
@@ -185,7 +199,7 @@ export class EtchRenderer {
     this.layers = [];
 
     for (const line of this.lines) {
-      line.segmets = [];
+      line.segments = [];
     }
 
     this.addBackground();
@@ -226,7 +240,8 @@ export class EtchRenderer {
   addCircleLayer(config) {
     // Save the layer config
     const layerId = this.layers.length;
-    this.layers.push({ ...config, id: layerId, type: "circle" });
+    const layer = { ...config, id: layerId, type: "circle" };
+    this.layers.push(layer);
 
     // Get affected lines
     const startY = config.y - config.radius;
@@ -246,7 +261,7 @@ export class EtchRenderer {
       // Don't add noise to a zero length segment
       if (startX == endX) continue;
 
-      [startX, endX] = this.addEdgeNoise(startX, endX, layerId, line.id);
+      [startX, endX] = this.addEdgeNoise(startX, endX, layer, line.id);
 
       // Don't add a zero length segment
       if (startX >= endX) continue;
@@ -260,7 +275,8 @@ export class EtchRenderer {
     // For any given y, the polygon can only have 2 edges
     // Save the layer config
     const layerId = this.layers.length;
-    this.layers.push({ ...config, id: layerId, type: "right-angle-polygon" });
+    const layer = { ...config, id: layerId, type: "right-angle-polygon" };
+    this.layers.push(layer);
 
     // Get affected lines
     const startY = Math.min(...config.vertices.map((v) => v.y));
@@ -293,7 +309,7 @@ export class EtchRenderer {
       // Don't add noise to a zero length segment
       if (startX == endX) continue;
 
-      [startX, endX] = this.addEdgeNoise(startX, endX, layerId, line.id);
+      [startX, endX] = this.addEdgeNoise(startX, endX, layer, line.id);
 
       // Don't add a zero length segment
       if (startX >= endX) continue;
@@ -302,52 +318,42 @@ export class EtchRenderer {
     }
   }
 
-  addEdgeNoise(startX, endX, layerId, lineId) {
-    const leftEdgeNoise = this.layers[layerId].leftEdgeNoise;
-    const rightEdgeNoise = this.layers[layerId].rightEdgeNoise;
-
-    const cachedNoise = this.noise.layerEdge[lineId]
-      ? this.noise.layerEdge[lineId][layerId]
-      : undefined;
-
-    if (leftEdgeNoise) {
-      // Check whether we have a previous left edge noise value on this line
-      if (cachedNoise?.left) {
-        startX += cachedNoise.left;
-      } else {
-        const offset = Math.round((this.random() - 0.5) * leftEdgeNoise);
-        startX += offset;
-        // Save the value to the noise cache
-        if (!this.noise.layerEdge[lineId]) {
-          this.noise.layerEdge[lineId] = [];
-        }
-        if (!this.noise.layerEdge[lineId][layerId]) {
-          this.noise.layerEdge[lineId][layerId] = {};
-        }
-        this.noise.layerEdge[lineId][layerId].left = offset;
-      }
+  addEdgeNoise(startX, endX, layer, lineId) {
+    // Noise is cached by layer key. Layers are rebuilt every frame, so the key
+    // (set by the caller, e.g. "cell-4") is what keeps a shape's edge stable
+    const key = layer.key ?? `layer-${layer.id}`;
+    let cached = this.noise.layerEdge.get(key);
+    if (!cached) {
+      cached = { left: [], right: [] };
+      this.noise.layerEdge.set(key, cached);
     }
 
-    if (rightEdgeNoise) {
-      // Check whether we have a previous right edge noise value on this line
-      if (cachedNoise?.right) {
-        endX += cachedNoise.right;
-      } else {
-        const offset = Math.round((this.random() - 0.5) * rightEdgeNoise);
-        endX += offset;
-
-        // Save the value to the noise cache
-        if (!this.noise.layerEdge[lineId]) {
-          this.noise.layerEdge[lineId] = [];
-        }
-        if (!this.noise.layerEdge[lineId][layerId]) {
-          this.noise.layerEdge[lineId][layerId] = {};
-        }
-        this.noise.layerEdge[lineId][layerId].right = offset;
-      }
+    if (layer.leftEdgeNoise) {
+      startX += this.getCachedEdgeOffset(
+        cached.left,
+        lineId,
+        layer.leftEdgeNoise,
+      );
+    }
+    if (layer.rightEdgeNoise) {
+      endX += this.getCachedEdgeOffset(
+        cached.right,
+        lineId,
+        layer.rightEdgeNoise,
+      );
     }
 
     return [startX, endX];
+  }
+
+  getCachedEdgeOffset(offsets, lineId, range) {
+    // Compare against undefined, not truthiness: an offset of 0 is a valid cached value
+    let offset = offsets[lineId];
+    if (offset === undefined) {
+      offset = Math.round((this.random() - 0.5) * range);
+      offsets[lineId] = offset;
+    }
+    return offset;
   }
 
   draw() {
@@ -426,11 +432,11 @@ export class EtchRenderer {
       }
 
       // Quantise the x locations
-      const mod = currentX % EtchRenderer.DRAW_STEP;
+      const mod = currentX % HatchedRenderer.DRAW_STEP;
       if (mod == 0) {
-        currentX += EtchRenderer.DRAW_STEP;
+        currentX += HatchedRenderer.DRAW_STEP;
       } else {
-        currentX += EtchRenderer.DRAW_STEP - mod;
+        currentX += HatchedRenderer.DRAW_STEP - mod;
       }
     }
 
@@ -453,7 +459,7 @@ export class EtchRenderer {
   }
 
   getStrokeParameters(x1, segment, line) {
-    const xDrawStep = Math.floor(x1 / EtchRenderer.DRAW_STEP);
+    const xDrawStep = Math.floor(x1 / HatchedRenderer.DRAW_STEP);
 
     // Get the final colour of the section
     const colour = this.getStrokeColour(x1, segment, line);
@@ -515,7 +521,7 @@ export class EtchRenderer {
     const xDrawStep = Math.floor(
       // TODO: Find a cleaner way to do this. Maybe a function, or store the value of bounding client
       // TODO: Does this work as intended?
-      x1 / EtchRenderer.DRAW_STEP,
+      x1 / HatchedRenderer.DRAW_STEP,
     );
     // Get the colour of the segment
     let colour = this.getColourOfSegment(segment);
@@ -560,7 +566,7 @@ export class EtchRenderer {
   getShadowCrossingForLine(line) {
     const y = line.y;
     // Remember: Positive y is down, but we have specified the angle from the bottom x-axis
-    const maxY = this.canvas.getBoundingClientRect().height; // TODO: This should be global
+    const maxY = this.height;
     const yFromBottom = maxY - y;
     let shadowX =
       yFromBottom / Math.tan(this.shadowDiagonalAngle) +
@@ -570,10 +576,7 @@ export class EtchRenderer {
     shadowX += this.noise.shadowDiagonal[line.id];
     shadowX = Math.round(shadowX);
 
-    shadowX = Math.max(
-      Math.min(shadowX, this.canvas.getBoundingClientRect().width),
-      0,
-    );
+    shadowX = Math.max(Math.min(shadowX, this.width), 0);
 
     return shadowX;
   }
@@ -583,95 +586,67 @@ export class EtchRenderer {
   }
 
   addSegment(lineId, startX, endX, layerId, isBackground) {
-    let segments = this.lines[lineId].segments;
+    // Segments on a line are kept sorted by startX and mutually exclusive.
+    // The new segment is written over whatever is underneath it, so it is
+    // spliced straight into the right place and the list never needs a re-sort.
+    const segments = this.lines[lineId].segments;
+    const newSegment = { startX, endX, layerId, isBackground };
 
-    // If there are no segments already for this line, add this one
-    if (!segments.length) {
-      segments.push({ startX, endX, layerId, isBackground });
-      return;
-    }
-
-    // Write this segment over any overlapping segments underneath it
-    // Therefore, segments are mutually exlusive, and sorted
-    let segmentsToRemove = [];
-    let segmentsToAdd = [];
-
-    for (let i = 0; i < segments.length; i++) {
-      const existingSegment = segments[i];
-      // Check if there is any overlap
-      if (
-        intersection(
-          [existingSegment.startX, existingSegment.endX],
-          [startX, endX],
-        )
-      ) {
-        // subtract the new segment from the existing segment
-        const newRanges = subtractRange(
-          [existingSegment.startX, existingSegment.endX],
-          [startX, endX],
-        );
-
-        if (newRanges.length == 0) {
-          // The new segment completely overlaps the existing segment
-          segmentsToRemove.push(i);
-        } else if (newRanges.length == 1) {
-          // The new segment overlaps one end of the existing segment
-          if (existingSegment.startX == newRanges[0][0]) {
-            // The start point is preserved, and the right side is cut short
-            existingSegment.rightCoveredByLayer = true;
-          } else {
-            existingSegment.leftCoveredByLayer = true;
-          }
-          existingSegment.startX = newRanges[0][0];
-          existingSegment.endX = newRanges[0][1];
-        } else if (newRanges.length == 2) {
-          // The new segment splits the existing segment in two
-          // Create a new segment for the other section of the existing segment (the right)
-          segmentsToAdd.push({
-            ...existingSegment,
-            startX: newRanges[1][0],
-            endX: newRanges[1][1],
-            leftCoveredByLayer: true,
-          });
-          // Update the range of the existing segment (the left)
-          existingSegment.startX = newRanges[0][0];
-          existingSegment.endX = newRanges[0][1];
-          existingSegment.rightCoveredByLayer = true;
-        }
+    // Binary search for the first segment that ends beyond the new start
+    let first = 0;
+    let high = segments.length;
+    while (first < high) {
+      const mid = (first + high) >> 1;
+      if (segments[mid].endX > startX) {
+        high = mid;
+      } else {
+        first = mid + 1;
       }
-      // TODO: Early exit once we are out of the segment range
-      // I.e. if the endX of the existing segment is greater than the endX of the new segment, stop
     }
 
-    // Now remove any segments to delete
-    segmentsToRemove.sort((a, b) => b - a); // sort decending to avoid re-indexing issues
-    for (const i of segmentsToRemove) {
-      segments.splice(i, 1);
+    // Every segment from `first` that starts before the new end is overlapped
+    let end = first;
+    while (end < segments.length && segments[end].startX < endX) {
+      end++;
     }
 
-    // Now add the new segments into list
-    segmentsToAdd.push({ startX, endX, layerId, isBackground });
-    for (const newSegment of segmentsToAdd) {
-      segments.push(newSegment);
+    const replacement = [];
+    if (end > first) {
+      const firstOverlapped = segments[first];
+      const lastOverlapped = segments[end - 1];
+
+      // The right-hand remainder must be copied before the left one is trimmed,
+      // as both can come from the same segment (the new one splits it in two)
+      const rightRemainder =
+        lastOverlapped.endX > endX
+          ? { ...lastOverlapped, startX: endX, leftCoveredByLayer: true }
+          : undefined;
+
+      if (firstOverlapped.startX < startX) {
+        firstOverlapped.endX = startX;
+        firstOverlapped.rightCoveredByLayer = true;
+        replacement.push(firstOverlapped);
+      }
+      replacement.push(newSegment);
+      if (rightRemainder) replacement.push(rightRemainder);
+    } else {
+      replacement.push(newSegment);
     }
-    // Sort by location along the line
-    // TODO: There will be a more efficient way to do this
-    segments.sort((a, b) => a.startX - b.startX);
+
+    segments.splice(first, end - first, ...replacement);
   }
 
   calculateBaseYOffset() {
     // Precalculates the values of sine at each draw step point to save time
     // These values are used when there is not a custom wave period for the layer
 
-    const numXSteps = Math.ceil(
-      this.canvas.getBoundingClientRect().width / EtchRenderer.DRAW_STEP,
-    );
+    const numXSteps = this.numXSteps;
 
     for (const line of this.lines) {
       const waveXNoise = this.noise.waveXOffset[line.id];
       const yOffsets = [...Array(numXSteps).keys()].map((step) =>
         Math.sin(
-          ((step * EtchRenderer.DRAW_STEP + waveXNoise) * 2 * Math.PI) /
+          ((step * HatchedRenderer.DRAW_STEP + waveXNoise) * 2 * Math.PI) /
             this.defaultWavePeriod,
         ),
       );
@@ -680,7 +655,7 @@ export class EtchRenderer {
   }
 
   getWaveYOffset(x, segment, line) {
-    const xDrawStep = Math.floor(x / EtchRenderer.DRAW_STEP);
+    const xDrawStep = Math.floor(x / HatchedRenderer.DRAW_STEP);
     // Returns the y-offset to be applied at the specified x
     // To add the wave defined by wavePeriod and waveAmplitude
     let wavePeriod = this.defaultWavePeriod;

@@ -1,310 +1,183 @@
-import { CloudBuilder } from "./lib/cloud-builder.js";
-import { EtchRenderer } from "./lib/etch-render.js";
+import { CumulusController } from "./lib/cumulus-controller.js";
 
-// TODO: Watch for changes to attributes and re-render the cloud when they change
-// TODO: Implement pixel perfect resizing of the canvas when the element is resized
-// TODO: Sunset colour mode (animate the shadow diag)
-// TODO: Use offscreen canvas
+const DEFAULTS = {
+  width: 500,
+  height: 500,
+  numCells: 15,
+  seed: 5, // TODO: randomize seed if not provided. 323 is good
+  lineWidth: 1,
+  lineSpacing: 1.5,
+};
 
+const RESIZE_DEBOUNCE_MS = 150;
+
+// The <cumulus-canvas> element: owns the DOM (shadow root and canvas), reads
+// attributes, and decides when the cloud must be rebuilt. Everything to do with
+// the cloud itself lives in CumulusController.
+//
+// Sizing: width/height attributes set a fixed size. A dimension without an
+// attribute takes the element's own CSS size (so the cloud can fill its
+// container), falling back to the default if the element has none.
+//
+// Anything that changes the cloud (attribute, resize, reduced-motion
+// preference) ends in rebuild(), which replaces the controller.
 export class Cumulus extends HTMLElement {
+  // Attribute names are lower case because HTML lower-cases attribute names
+  static observedAttributes = [
+    "width",
+    "height",
+    "numcells",
+    "seed",
+    "linewidth",
+    "linespacing",
+  ];
+
+  constructor() {
+    super();
+    this.controller = null;
+    this.size = null; // The size the current controller was built with
+    this.rebuildTimer = null;
+    this.inView = true;
+    this.reducedMotionQuery = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    );
+
+    this.onReducedMotionChange = () => this.scheduleRebuild();
+    this.onVisibilityChange = () => this.controller?.setPageVisible(!document.hidden);
+  }
+
   connectedCallback() {
-    // Only create the shadow root and canvas if they haven't been created yet
-    if (this.shadowRoot) return;
+    // The shadow root and canvas survive disconnection, so create them only once
+    if (!this.shadowRoot) {
+      const shadow = this.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = `
+        :host { display: inline-block; line-height: 0; }
+        canvas { display: block; }
+      `;
+      this.canvas = document.createElement("canvas");
+      shadow.append(style, this.canvas);
+    }
 
-    const width = Number(this.getAttribute("width")) || 500;
-    const height = Number(this.getAttribute("height")) || 500;
-    const numCells = Number(this.getAttribute("numCells")) || 15;
-    const seed = Number(this.getAttribute("seed")) || 5; // TODO: randomize seed if not provided 323 is good
-    const lineWidth = Number(this.getAttribute("lineWidth")) || 1;
-    const lineSpacing = Number(this.getAttribute("lineSpacing")) || 1.5;
-
-    // Initialise the cloud builder and generate the starting cells
-    this.cloudBuilder = new CloudBuilder(width, height, numCells, seed);
-    /*console.log(
-      "Generated cells:",
-      JSON.stringify(this.cloudBuilder.cells, null, 2),
-    );*/
-
-    const shadow = this.attachShadow({ mode: "open" });
-    this.canvas = document.createElement("canvas");
-    this.context = this.canvas.getContext("2d");
-    if (!this.context) return;
-
-    this.canvas.style.height = `${height}px`;
-    this.canvas.style.width = `${width}px`;
-    this.canvas.width = width; // TODO; do these help?
-    this.canvas.height = height;
-    shadow.append(this.canvas);
-
-    // Add a listener for mouse events
-    // TODO: Listen for mouse off event and set cursor to 0,0 or undefined
-    this.cursorPosition = { x: 0, y: 0 };
-    this.canvas.addEventListener("mousemove", (event) => {
-      this.getCursorPosition(event);
+    // Pause the animation when scrolled out of view
+    this.intersectionObserver = new IntersectionObserver((entries) => {
+      this.inView = entries[entries.length - 1].isIntersecting;
+      this.controller?.setInView(this.inView);
     });
-    this.canvas.addEventListener(
-      "mouseleave",
-      () => (this.cursorPosition = { x: 0, y: 0 }),
-    );
+    this.intersectionObserver.observe(this);
 
-    // Set up the renderer
-    this.renderer = new EtchRenderer(this.canvas, lineWidth, lineSpacing);
-    // Define the shade colours
-    // TODO: Define as consts outside of connectedCallback
-    this.renderer.colours.background = { hue: 206, sat: 57, light: 60 };
-    this.renderer.colours.light = { hue: 0, sat: 0, light: 100 };
-    this.renderer.colours.mid = { hue: 0, sat: 0, light: 75 };
-    this.renderer.colours.dark = { hue: 0, sat: 0, light: 50 };
-    this.renderer.colours.dark2 = { hue: 0, sat: 0, light: 15 };
-    this.renderer.setBackgroundBorderNoise(3);
-    this.renderer.finaliseRenderer();
-
-    this.drawFrame();
-
-    //this.renderer.setBackgroundPadding()
-    //this.renderer.setBackgroundMask()
-    //this.renderer.setBackgroundBoxNoise({leftVert, rightVert, topHor, bottomHor})
-    //this.renderer.setLineWidth()
-    //this.renderer.setLineSpacing()
-    //this.renderer.setWaves/WaveMap()
-    //this.renderer.setLineEndShape() // flat, rounded
-    //this.renderer.setBorderLinesEndShape() // tapered, rounded, noise on length, occassional dot at the end
-    //this.renderer.addLayer(json)
-
-    //this.renderer.renderCells(this.cloudBuilder.cells);
-    //this.renderer.renderCells(this.cloudBuilder.fillCircles);
-    //this.renderer.renderPolygon(this.cloudBuilder.cloudInnerRight);
-    //this.renderer.renderPolygon(this.cloudBuilder.cloudInnerLeft);
-
-    /*
-    // Draw the dome and border for testing
-
-
-    // Draw the dome
-    context.beginPath();
-    context.arc(
-      this.cloudBuilder.dome.x,
-      this.cloudBuilder.dome.y,
-      this.cloudBuilder.dome.radius,
-      Math.PI,
-      2 * Math.PI,
-    );
-    context.strokeStyle = "grey";
-    context.lineWidth = 1;
-    context.stroke();
-
-    // Draw the border around the canvas
-    context.strokeRect(0, 0, width, height);
-
-    // Draw the centreline
-    context.beginPath();
-    context.moveTo(
-      this.cloudBuilder.dome.x,
-      this.cloudBuilder.dome.y - this.cloudBuilder.dome.radius,
-    );
-    context.lineTo(this.cloudBuilder.dome.x, this.cloudBuilder.dome.y);
-    context.stroke();*/
-
-    // Animation
-    requestAnimationFrame(this.createNextFrame.bind(this));
-  }
-
-  createNextFrame() {
-    // This function is passed the timestamp
-
-    // Save the current config. TODO: Might not be needed
-    // this.context.save();
-    //const dpr = window.devicePixelRatio;
-    //this.context.scale(dpr, dpr);
-
-    // Simulate and draw the next frame
-    const changed = this.cloudBuilder.simulateNextFrame(
-      this.cursorPosition.x,
-      this.cursorPosition.y,
-    );
-    if (changed) {
-      // Clear the canvas
-      this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      this.renderer.clear();
-      this.drawFrame();
-    }
-
-    //this.context.restore();
-
-    requestAnimationFrame(this.createNextFrame.bind(this));
-  }
-
-  drawFrame() {
-    // Add the layers
-    //this.addFillCircleLayers(this.cloudBuilder.fillCircles);
-    //this.addFillCircleLayers(this.cloudBuilder.horizontalFillCircles);
-    //this.addCloudInnerLeftLayer(this.cloudBuilder.cloudInnerLeft);
-    //this.addCloudInnerRightLayer(this.cloudBuilder.cloudInnerRight);
-    this.addCloudCellLayers(this.cloudBuilder.cells);
-
-    this.renderer.draw();
-  }
-
-  addCloudCellLayer(cell) {
-    // Add the main cell first
-    this.renderer.addCircleLayer({
-      x: cell.x,
-      y: cell.y,
-      radius: cell.radius,
-      fill: this.renderer.colours.dark2,
-      rightEdgeNoise: 4, // Plus or minus this many pixels
-      leftEdgeNoise: 7,
-      rightPadding: 3, // TODO: Try without
-      leftPadding: 0,
-      lineWidth: 1.3,
-      specialType: "cloud-cell",
-      waveAmplitude: 0.6,
-      wavePeriod: 30,
+    // Rebuild when the element is resized
+    this.resizeObserver = new ResizeObserver(() => {
+      if (this.sizeHasChanged()) this.scheduleRebuild(RESIZE_DEBOUNCE_MS);
     });
+    this.resizeObserver.observe(this);
 
-    // Then add all its associated fractal circles
-    const linkedDarkFractals = this.cloudBuilder.darkFractalCircles.filter(
-      (c) => c.linkedCell == cell.id,
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
+    this.reducedMotionQuery.addEventListener(
+      "change",
+      this.onReducedMotionChange,
     );
-    for (const fractal of linkedDarkFractals) {
-      this.renderer.addCircleLayer({
-        x: cell.x + fractal.x,
-        y: cell.y + fractal.y,
-        radius: fractal.radius,
-        fill: this.renderer.colours.dark,
-        rightEdgeNoise: 2, // Plus or minus this many pixels
-        leftEdgeNoise: 4,
-        rightPadding: 0,
-        leftPadding: 0,
-        lineWidth: 1.4,
-        specialType: "dark-fractal",
-        waveAmplitude: 0.7,
-        wavePeriod: 30,
-      });
-    }
 
-    const linkedLightFractals = this.cloudBuilder.lightFractalCircles.filter(
-      (c) => c.linkedCell == cell.id,
+    this.rebuild();
+  }
+
+  disconnectedCallback() {
+    clearTimeout(this.rebuildTimer);
+    this.rebuildTimer = null;
+    this.intersectionObserver?.disconnect();
+    this.resizeObserver?.disconnect();
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    this.reducedMotionQuery.removeEventListener(
+      "change",
+      this.onReducedMotionChange,
     );
-    for (const fractal of linkedLightFractals) {
-      this.renderer.addCircleLayer({
-        x: cell.x + fractal.x,
-        y: cell.y + fractal.y,
-        radius: fractal.radius,
-        fill: this.renderer.colours.mid,
-        rightEdgeNoise: 4, // Plus or minus this many pixels
-        leftEdgeNoise: 4,
-        rightPadding: fractal.rightPadding,
-        leftPadding: 0,
-        specialType: "light-fractal",
-        waveAmplitude: 0.7,
-        wavePeriod: 30,
-      });
+    this.controller?.destroy();
+    this.controller = null;
+    this.size = null;
+  }
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    // Attributes present in the markup are reported before the element is
+    // connected. connectedCallback builds from them, so there is nothing to do
+    if (oldValue === newValue || !this.controller) return;
+    this.scheduleRebuild();
+  }
+
+  // Several attributes are often changed together, so changes are batched
+  // into a single rebuild
+  scheduleRebuild(delay = 0) {
+    clearTimeout(this.rebuildTimer);
+    this.rebuildTimer = setTimeout(() => {
+      this.rebuildTimer = null;
+      if (this.isConnected) this.rebuild();
+    }, delay);
+  }
+
+  rebuild() {
+    this.controller?.destroy();
+
+    const config = this.readConfig();
+    this.size = { width: config.width, height: config.height };
+    this.controller = new CumulusController(this.canvas, config);
+    this.controller.setInView(this.inView);
+    this.controller.setPageVisible(!document.hidden);
+  }
+
+  readConfig() {
+    const { width, height } = this.measure({ ignoreCanvas: true });
+    return {
+      width,
+      height,
+      numCells: Math.max(
+        1,
+        Math.floor(this.numberAttribute("numcells", DEFAULTS.numCells)),
+      ),
+      seed: this.numberAttribute("seed", DEFAULTS.seed),
+      lineWidth: this.positiveAttribute("linewidth", DEFAULTS.lineWidth),
+      lineSpacing: Math.max(
+        0,
+        this.numberAttribute("linespacing", DEFAULTS.lineSpacing),
+      ),
+      animate: !this.reducedMotionQuery.matches,
+    };
+  }
+
+  // The size the cloud should have: attributes first, then the element's CSS size
+  measure({ ignoreCanvas = false } = {}) {
+    if (ignoreCanvas) {
+      // The element is sized to fit its canvas unless CSS says otherwise.
+      // Collapse the canvas so that its old size is not mistaken for the CSS size
+      this.canvas.style.width = "0px";
+      this.canvas.style.height = "0px";
     }
+    const rect = this.getBoundingClientRect();
+    return {
+      width:
+        this.positiveAttribute("width", 0) ||
+        Math.round(rect.width) ||
+        DEFAULTS.width,
+      height:
+        this.positiveAttribute("height", 0) ||
+        Math.round(rect.height) ||
+        DEFAULTS.height,
+    };
   }
 
-  addFillCircleLayer(circle) {
-    this.renderer.addCircleLayer({
-      x: circle.x,
-      y: circle.y,
-      radius: circle.radius,
-      fill: this.renderer.colours.dark,
-      lineWidth: 1.3,
-      rightEdgeNoise: 6,
-      leftEdgeNoise: 6,
-      leftPadding: 0,
-      rightPadding: 0,
-    });
+  sizeHasChanged() {
+    if (!this.size) return false;
+    const { width, height } = this.measure();
+    return width !== this.size.width || height !== this.size.height;
   }
 
-  addCloudInnerRightLayer(inner) {
-    this.renderer.addRightAnglePolygonLayer({
-      vertices: inner,
-      fill: this.renderer.colours.dark,
-      lineWidth: 1.3,
-      rightEdgeNoise: 5,
-      leftEdgeNoise: 0,
-      leftPadding: 0,
-      rightPadding: 0,
-      // TODO: Top and bottom noise
-    });
+  numberAttribute(name, fallback) {
+    const raw = this.getAttribute(name);
+    if (raw === null || raw.trim() === "") return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : fallback;
   }
 
-  addCloudInnerLeftLayer(inner) {
-    this.renderer.addRightAnglePolygonLayer({
-      vertices: inner,
-      fill: this.renderer.colours.dark,
-      lineWidth: 1.3,
-      rightEdgeNoise: 0,
-      leftEdgeNoise: 5,
-      leftPadding: 0,
-      rightPadding: 0,
-      // TODO: Top and bottom noise
-    });
-  }
-
-  addCloudCellLayers(cells) {
-    for (const cell of cells) {
-      this.addCloudCellLayer(cell);
-    }
-  }
-
-  addFillCircleLayers(circles) {
-    for (const circle of circles) {
-      this.addFillCircleLayer(circle);
-    }
-  }
-
-  //----------------------------------------------------//
-
-  renderCell(cell, showNumbers = false) {
-    this.context.beginPath();
-    this.context.arc(cell.x, cell.y, cell.radius, 0, 2 * Math.PI);
-    this.context.fillStyle = "lightblue";
-    this.context.fill();
-    this.context.beginPath();
-    this.context.arc(cell.x, cell.y, cell.radius, 1.5 * Math.PI, 0.5 * Math.PI);
-    this.context.strokeStyle = "blue";
-    this.context.lineWidth = 1;
-    this.context.stroke();
-
-    if (showNumbers) {
-      this.context.save();
-      this.context.fillStyle = "blue";
-      this.context.font = `${Math.max(10, cell.radius * 0.5)}px sans-serif`;
-      this.context.textAlign = "center";
-      this.context.textBaseline = "middle";
-      this.context.fillText(String(cell.id), cell.x, cell.y);
-      this.context.restore();
-    }
-  }
-
-  renderCells(cells) {
-    for (const cell of cells) {
-      this.renderCell(cell);
-    }
-  }
-
-  renderPolygon(polygon) {
-    if (!polygon || polygon.length === 0) return;
-
-    this.context.beginPath();
-    this.context.moveTo(polygon[0].x, polygon[0].y);
-    for (let i = 1; i < polygon.length; i++) {
-      this.context.lineTo(polygon[i].x, polygon[i].y);
-    }
-    this.context.closePath();
-    this.context.fillStyle = "rgba(190, 216, 230, 0.4)"; // Light blue with transparency
-    this.context.fill();
-    //this.context.strokeStyle = "blue";
-    //this.context.lineWidth = 1;
-    //this.context.stroke();
-  }
-
-  getCursorPosition(event) {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    this.cursorPosition = { x, y };
+  positiveAttribute(name, fallback) {
+    const value = this.numberAttribute(name, fallback);
+    return value > 0 ? value : fallback;
   }
 }

@@ -3,9 +3,12 @@ import {
   intersectionOfMany,
   subtractRanges,
   getHorizontalLinesOfPolygon,
-  distanceBetweenPoints,
-  clamp,
 } from "./utils.js";
+
+// NOTE: Every call to this.random() is part of the public contract of a seed.
+// Adding, removing or reordering calls changes the clouds produced for existing
+// seeds. Anything that needs randomness at runtime (animation) must use its own
+// generator, see cloud-simulation.js.
 
 export class CloudBuilder {
   static MAX_CELLS = 100;
@@ -41,13 +44,15 @@ export class CloudBuilder {
 
     this.dome = { x, y, radius };
 
+    // Cells are looked up by id through cellsById (O(1)), never by array index:
+    // the cells array is re-ordered by sortBySize. Each cell owns its fractals
+    // (cell.lightFractals / cell.darkFractals), so no per-frame filtering is needed.
     this.cells = [];
+    this.cellsById = new Map();
     this.cloudInnerLeft = [];
     this.cloudInnerRight = [];
     this.fillCircles = [];
     this.horizontalFillCircles = [];
-    this.lightFractalCircles = [];
-    this.darkFractalCircles = [];
 
     this.generateCells(Math.min(numCells, CloudBuilder.MAX_CELLS));
     this.matchBottomCell();
@@ -60,185 +65,31 @@ export class CloudBuilder {
     this.addFractalsToCells();
     this.addFillCirclesToHorzontals();
     this.sortBySize();
+
+    // The cells were re-ordered, so rebuild the fills to match what later updates produce
+    this.updateFills();
   }
 
-  simulateNextFrame(mouseX, mouseY) {
-    this.changed = false;
-    // Apply any mouse effects to cells
-    this.moveCellsWithMouse(mouseX, mouseY);
-    //this.fractalSim();
-    //this.moveCloudCells();
-    //this.growCloudCells()
-    //this.fractalEffects()
-
-    // Recalculate as needed
+  // Recalculates everything that is derived from the current cell positions.
+  // Call this after cells have moved, and only then.
+  updateFills() {
     this.createCloudInner();
     this.fillCentreLineGaps();
 
-    return this.changed;
-  }
-
-  moveCellsWithMouse(cursorX, cursorY) {
-    // TODO: Implement motion with force/velocity for a better easing function
-    // TODO: Spread fractals when moving a cell?
-    const borderPadding = 20; // TODO: Move to top
-    const maxStep = 5;
-    const maxShift = 30;
-    const minStep = 0.1;
-    // We will shift cells left and right only to avoid the cursor
-    // Determine the desired location of the cell
-    for (const cell of this.cells) {
-      let desiredLocation = {
-        x: cell.sim.baseLocation.x,
-        y: cell.sim.baseLocation.y,
-      };
-
-      if (
-        distanceBetweenPoints(cell.x, cell.y, cursorX, cursorY) <
-        cell.sim.cursorRadius
-      ) {
-        // Get the cursor position relative to the cell centre
-        const relX = Math.abs(cursorX - cell.x);
-        const relY = Math.abs(cursorY - cell.y);
-
-        // How much would the cell need to shift left or right for the cursor to be outside the cursor radius
-        let shiftX = Math.ceil(
-          Math.sqrt(cell.sim.cursorRadius ** 2 - relY ** 2) - relX,
-        );
-        shiftX = cursorX >= cell.x ? -shiftX : shiftX; // If the cursor is to the right, shift the cell left
-
-        let desiredX = cell.x + shiftX;
-        desiredX = clamp(
-          desiredX,
-          cell.sim.baseLocation.x - maxShift,
-          cell.sim.baseLocation.x + maxShift,
-        );
-
-        if (cell.sim.baseLocation.x >= this.dome.x) {
-          // The cell is on the right of the dome
-          // TODO: Allow a slight crossing of the centre line that would not affect the visible fill
-          // TODO: Move linked stepped children cells?
-          desiredLocation = {
-            x: clamp(
-              desiredX,
-              this.dome.x,
-              this.width - borderPadding - cell.radius,
-            ),
-            y: cell.y,
-          };
-        } else {
-          // The cell is on the left of the dome
-          desiredLocation = {
-            x: clamp(desiredX, borderPadding + cell.radius, this.dome.x),
-            y: cell.y,
-          };
-        }
-
-        // Allow the cells to return to their base location
-        if (
-          cursorX < desiredLocation.x &&
-          desiredLocation.x < cell.sim.baseLocation.x
-        ) {
-          desiredLocation = cell.sim.baseLocation;
-        } else if (
-          cursorX > desiredLocation.x &&
-          desiredLocation.x > cell.sim.baseLocation.x
-        ) {
-          desiredLocation = cell.sim.baseLocation;
-        }
-      }
-
-      // Move the cell a step towards its desired location
-      // TODO: Round all values to 10th of a pixel
-      const desiredXChange = desiredLocation.x - cell.x;
-      if (Math.abs(desiredXChange) < minStep) {
-        cell.x = desiredLocation.x;
-      } else {
-        let xStep = clamp(desiredXChange * cell.sim.speed, -maxStep, maxStep);
-        if (Math.abs(xStep) < minStep) {
-          xStep = xStep > 0 ? minStep : -minStep;
-        }
-        cell.x += xStep;
-      }
-
-      // Flag if there there will be changes to draw
-      if (Math.abs(desiredXChange)) {
-        this.changed = true;
-      }
+    // Horizontal fill circles travel with the cell that owns their edge
+    for (const circle of this.horizontalFillCircles) {
+      circle.x = this.cellsById.get(circle.linkedCell).x + circle.dx;
     }
   }
 
-  fractalSim() {
-    // TODO: Simulator in a separate file
-    // TODO: This didn't work very well, improve or remove
-    // TODO: Is rounding best here?
-    for (const fractal of this.lightFractalCircles) {
-      // Update the radius and location of each light fractal
-      let step = fractal.sim.currentStep + 1;
-      if (step >= fractal.sim.cycleLength) {
-        step = 0;
-      }
-      fractal.sim.currentStep = step;
-
-      const mult = fractal.sim.clockwise ? 1 : -1;
-      fractal.x = Math.round(
-        fractal.sim.rotCentreX -
-          mult *
-            Math.cos((step * 2 * Math.PI) / fractal.sim.cycleLength) *
-            fractal.sim.rotRadiusX,
-        2,
-      );
-
-      fractal.y = Math.round(
-        fractal.sim.rotCentreY -
-          Math.sin((step * 2 * Math.PI) / fractal.sim.cycleLength) *
-            fractal.sim.rotRadiusY,
-        2,
-      );
-
-      const shrinkingProgress =
-        (step - fractal.sim.maxRadiusStep) /
-        ((fractal.sim.cycleLength * 3) / 4 - fractal.sim.maxRadiusStep);
-
-      if (step <= fractal.sim.maxRadiusStep) {
-        fractal.radius =
-          (step / fractal.sim.maxRadiusStep) * fractal.sim.maxRadius;
-      } else if (step <= (fractal.sim.cycleLength * 3) / 4) {
-        fractal.radius = (1 - shrinkingProgress) * fractal.sim.maxRadius;
-      } else {
-        fractal.radius = 0;
-      }
-
-      fractal.radius = Math.round(fractal.radius, 2);
-    }
-  }
-
-  moveCloudCells() {
-    for (const cell of this.cells) {
-      const r = this.random();
-      const step = 3;
-
-      if (r < 0.3) {
-        // Move up
-        cell.y -= step;
-        this.lightFractalCircles
-          .filter((c) => c.linkedCell == cell.id)
-          .forEach((fractal) => (fractal.y -= step));
-        this.darkFractalCircles
-          .filter((c) => c.linkedCell == cell.id)
-          .forEach((fractal) => (fractal.y -= step));
-      } else if (r < 0.6) {
-        // Move down
-        cell.y += step;
-        this.lightFractalCircles
-          .filter((c) => c.linkedCell == cell.id)
-          .forEach((fractal) => (fractal.y += step));
-        this.darkFractalCircles
-          .filter((c) => c.linkedCell == cell.id)
-          .forEach((fractal) => (fractal.y += step));
-      }
-      // Otherwise, stay still
-    }
+  addCell({ x, y, radius }) {
+    const cell = { x, y, radius, id: this.cells.length };
+    cell.sim = this.generateCellSimParams(cell);
+    cell.lightFractals = [];
+    cell.darkFractals = [];
+    this.cells.push(cell);
+    this.cellsById.set(cell.id, cell);
+    return cell;
   }
 
   generateCells(numCells) {
@@ -252,16 +103,13 @@ export class CloudBuilder {
       const x = Math.round(this.dome.x + dist * Math.cos(angle));
       const y = Math.round(this.dome.y - dist * Math.sin(angle));
 
-      const cell = { x, y, radius, id: i };
-      const sim = this.generateCellSimParams(cell);
-
-      this.cells.push({ ...cell, sim });
+      this.addCell({ x, y, radius });
     }
   }
 
   generateCellSimParams(cell) {
     return {
-      speed: 0.01,
+      speed: 0.02,
       baseLocation: { x: cell.x, y: cell.y },
       cursorRadius: cell.radius * 3,
     };
@@ -278,27 +126,13 @@ export class CloudBuilder {
     let horizontalOffset = this.random() * this.dome.radius;
     let y = cellBottoms[lowestCellIndex] - radius;
 
-    if (lowestCell.x > this.dome.x) {
-      // If the lowest cell is to the right of the dome center, place the new cell to the left
-      const cell = {
-        x: Math.round(this.dome.x - horizontalOffset),
-        y,
-        radius: radius,
-        id: this.cells.length,
-      };
-      const sim = this.generateCellSimParams(cell);
-      this.cells.push({ ...cell, sim });
-    } else {
-      // If the lowest cell is to the left of the dome center, place the new cell to the right
-      const cell = {
-        x: Math.round(this.dome.x + horizontalOffset),
-        y,
-        radius: radius,
-        id: this.cells.length,
-      };
-      const sim = this.generateCellSimParams(cell);
-      this.cells.push({ ...cell, sim });
-    }
+    // Place the new cell on the opposite side of the dome centre to the lowest cell
+    const side = lowestCell.x > this.dome.x ? -1 : 1;
+    this.addCell({
+      x: Math.round(this.dome.x + side * horizontalOffset),
+      y,
+      radius,
+    });
   }
 
   addExtensionLines() {
@@ -579,14 +413,7 @@ export class CloudBuilder {
           const x = Math.round(cell.x + xOffset);
           const y = cell.y + cell.radius - radius; // Align the baselines
 
-          const childCell = {
-            x,
-            y,
-            radius,
-            id: this.cells.length,
-          };
-          const sim = this.generateCellSimParams(childCell);
-          this.cells.push({ ...childCell, sim });
+          this.addCell({ x, y, radius });
         }
       }
     }
@@ -600,12 +427,14 @@ export class CloudBuilder {
       totalWeights += cell.radius ** 2;
     }
     const weightedCentre = Math.round(centreSum / totalWeights);
-    console.log("weighted centre", weightedCentre);
 
     const xOffset = this.dome.x - weightedCentre;
 
     for (const cell of this.cells) {
       cell.x += xOffset;
+      // The base location is where the simulation returns the cell to rest,
+      // so it must move with the cell or the cloud drifts back on first update
+      cell.sim.baseLocation.x += xOffset;
     }
   }
 
@@ -616,15 +445,9 @@ export class CloudBuilder {
   }
 
   addFractalsToCells() {
-    this.lightFractalCircles = [];
-    this.darkFractalCircles = [];
     for (const cell of this.cells) {
-      this.lightFractalCircles = this.lightFractalCircles.concat(
-        this.generateLightFractalsForCell(cell),
-      );
-      this.darkFractalCircles = this.darkFractalCircles.concat(
-        this.generateDarkFractalsForCell(cell),
-      );
+      cell.lightFractals = this.generateLightFractalsForCell(cell);
+      cell.darkFractals = this.generateDarkFractalsForCell(cell);
     }
   }
 
@@ -825,6 +648,7 @@ export class CloudBuilder {
   }
 
   addFillCirclesToHorzontals() {
+    this.horizontalFillCircles = [];
     this.addFillCirclesToHorzontalsAux("left");
     this.addFillCirclesToHorzontalsAux("right");
   }
@@ -871,24 +695,16 @@ export class CloudBuilder {
                 ? line.vertices[0].id
                 : line.vertices[1].id;
           }
-          // TODO: Using id as index is dangerous due to sortBySize
-          const linkedCell = this.cells[linkedCellId];
+          const linkedCell = this.cellsById.get(linkedCellId);
 
           const radius = Math.round(
             this.random() *
               (linkedCell.lowerExtension - linkedCell.upperExtension),
           );
-          if (line.y > linkedCell.y) {
-            console.log(
-              "Horizontal fill circle is lower than it should be",
-              line,
-              linkedCell,
-            );
-          }
-          // TODO: store separately to keep with sim
 
           this.horizontalFillCircles.push({
             x,
+            dx: x - linkedCell.x, // Offset from the linked cell, see updateFills()
             y: line.y,
             radius,
             linkedCell: linkedCellId,
