@@ -4,6 +4,7 @@ import { EtchRenderer } from "./lib/etch-render.js";
 // TODO: Watch for changes to attributes and re-render the cloud when they change
 // TODO: Implement pixel perfect resizing of the canvas when the element is resized
 // TODO: Sunset colour mode (animate the shadow diag)
+// TODO: Use offscreen canvas
 
 export class Cumulus extends HTMLElement {
   connectedCallback() {
@@ -12,10 +13,10 @@ export class Cumulus extends HTMLElement {
 
     const width = Number(this.getAttribute("width")) || 500;
     const height = Number(this.getAttribute("height")) || 500;
-    const numCells = Number(this.getAttribute("numCells")) || 10;
-    const seed = Number(this.getAttribute("seed")) || 314; // TODO: randomize seed if not provided 312 is good
+    const numCells = Number(this.getAttribute("numCells")) || 15;
+    const seed = Number(this.getAttribute("seed")) || 5; // TODO: randomize seed if not provided 323 is good
     const lineWidth = Number(this.getAttribute("lineWidth")) || 1;
-    const lineSpacing = Number(this.getAttribute("lineWidth")) || 2;
+    const lineSpacing = Number(this.getAttribute("lineSpacing")) || 1.5;
 
     // Initialise the cloud builder and generate the starting cells
     this.cloudBuilder = new CloudBuilder(width, height, numCells, seed);
@@ -34,6 +35,17 @@ export class Cumulus extends HTMLElement {
     this.canvas.width = width; // TODO; do these help?
     this.canvas.height = height;
     shadow.append(this.canvas);
+
+    // Add a listener for mouse events
+    // TODO: Listen for mouse off event and set cursor to 0,0 or undefined
+    this.cursorPosition = { x: 0, y: 0 };
+    this.canvas.addEventListener("mousemove", (event) => {
+      this.getCursorPosition(event);
+    });
+    this.canvas.addEventListener(
+      "mouseleave",
+      () => (this.cursorPosition = { x: 0, y: 0 }),
+    );
 
     // Set up the renderer
     this.renderer = new EtchRenderer(this.canvas, lineWidth, lineSpacing);
@@ -97,9 +109,8 @@ export class Cumulus extends HTMLElement {
     requestAnimationFrame(this.createNextFrame.bind(this));
   }
 
-  createNextFrame(timestamp) {
-    // Clear the canvas
-    this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  createNextFrame() {
+    // This function is passed the timestamp
 
     // Save the current config. TODO: Might not be needed
     // this.context.save();
@@ -107,9 +118,16 @@ export class Cumulus extends HTMLElement {
     //this.context.scale(dpr, dpr);
 
     // Simulate and draw the next frame
-    this.cloudBuilder.simulateNextFrame(timestamp);
-    this.renderer.clear();
-    this.drawFrame();
+    const changed = this.cloudBuilder.simulateNextFrame(
+      this.cursorPosition.x,
+      this.cursorPosition.y,
+    );
+    if (changed) {
+      // Clear the canvas
+      this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      this.renderer.clear();
+      this.drawFrame();
+    }
 
     //this.context.restore();
 
@@ -118,9 +136,10 @@ export class Cumulus extends HTMLElement {
 
   drawFrame() {
     // Add the layers
-    this.addFillCircleLayers(this.cloudBuilder.fillCircles);
-    this.addCloudInnerLeftLayer(this.cloudBuilder.cloudInnerLeft);
-    this.addCloudInnerRightLayer(this.cloudBuilder.cloudInnerRight);
+    //this.addFillCircleLayers(this.cloudBuilder.fillCircles);
+    //this.addFillCircleLayers(this.cloudBuilder.horizontalFillCircles);
+    //this.addCloudInnerLeftLayer(this.cloudBuilder.cloudInnerLeft);
+    //this.addCloudInnerRightLayer(this.cloudBuilder.cloudInnerRight);
     this.addCloudCellLayers(this.cloudBuilder.cells);
 
     this.renderer.draw();
@@ -132,7 +151,7 @@ export class Cumulus extends HTMLElement {
       x: cell.x,
       y: cell.y,
       radius: cell.radius,
-      fill: this.renderer.colours.dark,
+      fill: this.renderer.colours.dark2,
       rightEdgeNoise: 4, // Plus or minus this many pixels
       leftEdgeNoise: 7,
       rightPadding: 3, // TODO: Try without
@@ -149,10 +168,10 @@ export class Cumulus extends HTMLElement {
     );
     for (const fractal of linkedDarkFractals) {
       this.renderer.addCircleLayer({
-        x: fractal.x,
-        y: fractal.y,
+        x: cell.x + fractal.x,
+        y: cell.y + fractal.y,
         radius: fractal.radius,
-        fill: this.renderer.colours.dark2,
+        fill: this.renderer.colours.dark,
         rightEdgeNoise: 2, // Plus or minus this many pixels
         leftEdgeNoise: 4,
         rightPadding: 0,
@@ -169,8 +188,8 @@ export class Cumulus extends HTMLElement {
     );
     for (const fractal of linkedLightFractals) {
       this.renderer.addCircleLayer({
-        x: fractal.x,
-        y: fractal.y,
+        x: cell.x + fractal.x,
+        y: cell.y + fractal.y,
         radius: fractal.radius,
         fill: this.renderer.colours.mid,
         rightEdgeNoise: 4, // Plus or minus this many pixels
@@ -280,5 +299,12 @@ export class Cumulus extends HTMLElement {
     //this.context.strokeStyle = "blue";
     //this.context.lineWidth = 1;
     //this.context.stroke();
+  }
+
+  getCursorPosition(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    this.cursorPosition = { x, y };
   }
 }

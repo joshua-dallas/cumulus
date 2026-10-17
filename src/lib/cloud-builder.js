@@ -3,16 +3,19 @@ import {
   intersectionOfMany,
   subtractRanges,
   getHorizontalLinesOfPolygon,
+  distanceBetweenPoints,
+  clamp,
 } from "./utils.js";
 
 export class CloudBuilder {
   static MAX_CELLS = 100;
-  static MIN_PADDING_RATIO = 0.1; // The minimum padding to ensure cells don't touch the edges of the canvas
-  static MIN_CELL_RADIUS = 0.05; // Minimum cell radius as a fraction of the dome radius
-  static MAX_CELL_RADIUS = 0.22; // Maximum cell radius as a fraction of the dome radius
+  static MIN_PADDING_RATIO = 0.2; // The minimum padding to ensure cells don't touch the edges of the canvas
+  static MIN_CELL_RADIUS = 0.1; // Minimum cell radius as a fraction of the dome radius
+  static MAX_CELL_RADIUS = 0.3; // Maximum cell radius as a fraction of the dome radius
   // TODO: Add additional padding to allow for cells to grow and rise
   // TODO: Minimum base width for matched bottom cell?
   // TODO: Find weighted centre of cells and position in the centre
+  // TODO: Flag what lines have changed between animation frames
 
   constructor(width = 500, height = 500, numCells = 10, seed = 42) {
     this.random = mulberry32(seed);
@@ -38,8 +41,17 @@ export class CloudBuilder {
 
     this.dome = { x, y, radius };
 
+    this.cells = [];
+    this.cloudInnerLeft = [];
+    this.cloudInnerRight = [];
+    this.fillCircles = [];
+    this.horizontalFillCircles = [];
+    this.lightFractalCircles = [];
+    this.darkFractalCircles = [];
+
     this.generateCells(Math.min(numCells, CloudBuilder.MAX_CELLS));
     this.matchBottomCell();
+    this.centreCells();
     this.addSteppedChildCells();
     this.addExtensionLines();
     this.fillInnerGaps();
@@ -50,17 +62,155 @@ export class CloudBuilder {
     this.sortBySize();
   }
 
-  simulateNextFrame() {
-    // This function is passed the timestamp
+  simulateNextFrame(mouseX, mouseY) {
+    this.changed = false;
+    // Apply any mouse effects to cells
+    this.moveCellsWithMouse(mouseX, mouseY);
+    //this.fractalSim();
     //this.moveCloudCells();
     //this.growCloudCells()
     //this.fractalEffects()
 
-    // Clear the innerFill
-
     // Recalculate as needed
     this.createCloudInner();
     this.fillCentreLineGaps();
+
+    return this.changed;
+  }
+
+  moveCellsWithMouse(cursorX, cursorY) {
+    // TODO: Implement motion with force/velocity for a better easing function
+    // TODO: Spread fractals when moving a cell?
+    const borderPadding = 20; // TODO: Move to top
+    const maxStep = 5;
+    const maxShift = 30;
+    const minStep = 0.1;
+    // We will shift cells left and right only to avoid the cursor
+    // Determine the desired location of the cell
+    for (const cell of this.cells) {
+      let desiredLocation = {
+        x: cell.sim.baseLocation.x,
+        y: cell.sim.baseLocation.y,
+      };
+
+      if (
+        distanceBetweenPoints(cell.x, cell.y, cursorX, cursorY) <
+        cell.sim.cursorRadius
+      ) {
+        // Get the cursor position relative to the cell centre
+        const relX = Math.abs(cursorX - cell.x);
+        const relY = Math.abs(cursorY - cell.y);
+
+        // How much would the cell need to shift left or right for the cursor to be outside the cursor radius
+        let shiftX = Math.ceil(
+          Math.sqrt(cell.sim.cursorRadius ** 2 - relY ** 2) - relX,
+        );
+        shiftX = cursorX >= cell.x ? -shiftX : shiftX; // If the cursor is to the right, shift the cell left
+
+        let desiredX = cell.x + shiftX;
+        desiredX = clamp(
+          desiredX,
+          cell.sim.baseLocation.x - maxShift,
+          cell.sim.baseLocation.x + maxShift,
+        );
+
+        if (cell.sim.baseLocation.x >= this.dome.x) {
+          // The cell is on the right of the dome
+          // TODO: Allow a slight crossing of the centre line that would not affect the visible fill
+          // TODO: Move linked stepped children cells?
+          desiredLocation = {
+            x: clamp(
+              desiredX,
+              this.dome.x,
+              this.width - borderPadding - cell.radius,
+            ),
+            y: cell.y,
+          };
+        } else {
+          // The cell is on the left of the dome
+          desiredLocation = {
+            x: clamp(desiredX, borderPadding + cell.radius, this.dome.x),
+            y: cell.y,
+          };
+        }
+
+        // Allow the cells to return to their base location
+        if (
+          cursorX < desiredLocation.x &&
+          desiredLocation.x < cell.sim.baseLocation.x
+        ) {
+          desiredLocation = cell.sim.baseLocation;
+        } else if (
+          cursorX > desiredLocation.x &&
+          desiredLocation.x > cell.sim.baseLocation.x
+        ) {
+          desiredLocation = cell.sim.baseLocation;
+        }
+      }
+
+      // Move the cell a step towards its desired location
+      // TODO: Round all values to 10th of a pixel
+      const desiredXChange = desiredLocation.x - cell.x;
+      if (Math.abs(desiredXChange) < minStep) {
+        cell.x = desiredLocation.x;
+      } else {
+        let xStep = clamp(desiredXChange * cell.sim.speed, -maxStep, maxStep);
+        if (Math.abs(xStep) < minStep) {
+          xStep = xStep > 0 ? minStep : -minStep;
+        }
+        cell.x += xStep;
+      }
+
+      // Flag if there there will be changes to draw
+      if (Math.abs(desiredXChange)) {
+        this.changed = true;
+      }
+    }
+  }
+
+  fractalSim() {
+    // TODO: Simulator in a separate file
+    // TODO: This didn't work very well, improve or remove
+    // TODO: Is rounding best here?
+    for (const fractal of this.lightFractalCircles) {
+      // Update the radius and location of each light fractal
+      let step = fractal.sim.currentStep + 1;
+      if (step >= fractal.sim.cycleLength) {
+        step = 0;
+      }
+      fractal.sim.currentStep = step;
+
+      const mult = fractal.sim.clockwise ? 1 : -1;
+      fractal.x = Math.round(
+        fractal.sim.rotCentreX -
+          mult *
+            Math.cos((step * 2 * Math.PI) / fractal.sim.cycleLength) *
+            fractal.sim.rotRadiusX,
+        2,
+      );
+
+      fractal.y = Math.round(
+        fractal.sim.rotCentreY -
+          Math.sin((step * 2 * Math.PI) / fractal.sim.cycleLength) *
+            fractal.sim.rotRadiusY,
+        2,
+      );
+
+      const shrinkingProgress =
+        (step - fractal.sim.maxRadiusStep) /
+        ((fractal.sim.cycleLength * 3) / 4 - fractal.sim.maxRadiusStep);
+
+      if (step <= fractal.sim.maxRadiusStep) {
+        fractal.radius =
+          (step / fractal.sim.maxRadiusStep) * fractal.sim.maxRadius;
+      } else if (step <= (fractal.sim.cycleLength * 3) / 4) {
+        fractal.radius = (1 - shrinkingProgress) * fractal.sim.maxRadius;
+      } else {
+        fractal.radius = 0;
+      }
+
+      fractal.radius = Math.round(fractal.radius, 2);
+    }
   }
 
   moveCloudCells() {
@@ -102,8 +252,19 @@ export class CloudBuilder {
       const x = Math.round(this.dome.x + dist * Math.cos(angle));
       const y = Math.round(this.dome.y - dist * Math.sin(angle));
 
-      this.cells.push({ x, y, radius, id: i });
+      const cell = { x, y, radius, id: i };
+      const sim = this.generateCellSimParams(cell);
+
+      this.cells.push({ ...cell, sim });
     }
+  }
+
+  generateCellSimParams(cell) {
+    return {
+      speed: 0.01,
+      baseLocation: { x: cell.x, y: cell.y },
+      cursorRadius: cell.radius * 3,
+    };
   }
 
   matchBottomCell() {
@@ -119,20 +280,24 @@ export class CloudBuilder {
 
     if (lowestCell.x > this.dome.x) {
       // If the lowest cell is to the right of the dome center, place the new cell to the left
-      this.cells.push({
+      const cell = {
         x: Math.round(this.dome.x - horizontalOffset),
         y,
         radius: radius,
         id: this.cells.length,
-      });
+      };
+      const sim = this.generateCellSimParams(cell);
+      this.cells.push({ ...cell, sim });
     } else {
       // If the lowest cell is to the left of the dome center, place the new cell to the right
-      this.cells.push({
+      const cell = {
         x: Math.round(this.dome.x + horizontalOffset),
         y,
         radius: radius,
         id: this.cells.length,
-      });
+      };
+      const sim = this.generateCellSimParams(cell);
+      this.cells.push({ ...cell, sim });
     }
   }
 
@@ -414,9 +579,33 @@ export class CloudBuilder {
           const x = Math.round(cell.x + xOffset);
           const y = cell.y + cell.radius - radius; // Align the baselines
 
-          this.cells.push({ x, y, radius, id: this.cells.length });
+          const childCell = {
+            x,
+            y,
+            radius,
+            id: this.cells.length,
+          };
+          const sim = this.generateCellSimParams(childCell);
+          this.cells.push({ ...childCell, sim });
         }
       }
+    }
+  }
+
+  centreCells() {
+    let centreSum = 0;
+    let totalWeights = 0;
+    for (const cell of this.cells) {
+      centreSum += cell.x * cell.radius ** 2;
+      totalWeights += cell.radius ** 2;
+    }
+    const weightedCentre = Math.round(centreSum / totalWeights);
+    console.log("weighted centre", weightedCentre);
+
+    const xOffset = this.dome.x - weightedCentre;
+
+    for (const cell of this.cells) {
+      cell.x += xOffset;
     }
   }
 
@@ -460,7 +649,7 @@ export class CloudBuilder {
   generateDarkFractalsForCell(cell) {
     // TODO: Better naming
     // TODO: Move constants elsewhere
-    const numberOfFractals = 11; // TODO: Should this be dependant on cell radius?
+    const numberOfFractals = 15; // TODO: Should this be dependant on cell radius?
     const probOfDarkFractals = 0.6; // Not every cell will have dark fractals
 
     if (this.random() > probOfDarkFractals) return [];
@@ -489,8 +678,9 @@ export class CloudBuilder {
     const angle = ((this.random() * 3) / 2) * Math.PI - Math.PI / 2; // TODO: Tailor these angles
     const dist = this.random() * cell.radius;
 
-    const x = Math.round(cell.x + dist * Math.cos(angle));
-    const y = Math.round(cell.y - dist * Math.sin(angle));
+    // x and y are relative to the cell position
+    const x = Math.round(dist * Math.cos(angle));
+    const y = Math.round(-dist * Math.sin(angle));
 
     const radius = Math.round(
       cell.radius *
@@ -507,25 +697,31 @@ export class CloudBuilder {
       );
     }
 
-    return {
+    let fractal = {
       linkedCell: cell.id,
       x,
       y,
       radius,
       rightPadding,
     };
+
+    const sim = this.generateFractalSimParams(fractal, cell);
+    fractal = { ...fractal, sim };
+
+    return fractal;
   }
 
   generateDarkFractalCircle(cell) {
-    const minRadiusRatio = 0.15; // Ratio of fractal radius to cell radius
-    const maxRadiusRatio = 0.25;
+    const minRadiusRatio = 0.2; // Ratio of fractal radius to cell radius
+    const maxRadiusRatio = 0.3;
     const minDist = 0.5; // Fraction of cell radius
 
     const angle = ((this.random() * 2) / 3) * Math.PI + Math.PI * (2 / 3); // TODO: Tailor these angles
     const dist = (this.random() * (1 - minDist) + minDist) * cell.radius;
 
-    const x = Math.round(cell.x + dist * Math.cos(angle));
-    const y = Math.round(cell.y - dist * Math.sin(angle));
+    // x and y are relative to the cell position
+    const x = Math.round(dist * Math.cos(angle));
+    const y = Math.round(-dist * Math.sin(angle));
 
     const radius = Math.round(
       cell.radius *
@@ -537,6 +733,94 @@ export class CloudBuilder {
       x,
       y,
       radius,
+    };
+  }
+
+  generateFractalSimParams(fractal, cell) {
+    // We model fractals as moving in an ellipse, relative to their linked cell
+    // There is a location where they grow to their maximum size and then
+    // fall and shrink to nothing. When they reach their horizontal mid-point
+    // they begin to grow again. This models their growing and falling behaviour
+    const fps = 60; // TODO: use timestamp, move these values to the top
+    const minCycleLength = 15 * fps;
+    const maxCycleLength = 30 * fps;
+    const maxRadiusMultiple = 3;
+    const minRotRadiusX = 0; // Ratio of cell radius
+    const maxRotRadiusX = 0.5;
+    const minRotRadiusY = 0.2; // Ratio of cell radius
+    const maxRotRadiusY = 0.5;
+
+    // Chose a cycle length
+    const cycleLength = Math.round(
+      this.random() * (maxCycleLength - minCycleLength) + minCycleLength,
+    );
+
+    // Chose a max radius
+    const maxRadius = Math.round(
+      (this.random() * (maxRadiusMultiple - 1) + 1) * fractal.radius,
+    );
+
+    // Chose a maximum size location
+    const maxRadiusStep = Math.round(
+      Math.round((this.random() * cycleLength) / 4 + cycleLength / 4),
+    );
+
+    // Which side is the fractal on
+    const rightSide = fractal.x > cell.x;
+    const clockwise = rightSide;
+
+    // Decide whether the fractal is currently rising or falling
+    // TODO: Should this be partially random?
+    const horDistFromCellCentre = Math.abs(fractal.x - cell.x);
+    const isFalling = horDistFromCellCentre > cell.radius / 2;
+
+    // Determine the current fractal cycle step
+    let currentStep;
+    if (isFalling) {
+      currentStep = Math.round(
+        ((3 * cycleLength) / 4 - maxRadiusStep) * // The fractal shrinks to zero size at the bottom of the cycle
+          (1 - fractal.radius / maxRadius) +
+          maxRadiusStep,
+      );
+    } else {
+      currentStep = Math.round(maxRadiusStep * (fractal.radius / maxRadius));
+    }
+
+    // Choose a rotation radius
+    const rotRadiusX = Math.round(
+      (this.random() * (maxRotRadiusX - minRotRadiusX) + minRotRadiusX) *
+        cell.radius,
+    );
+
+    let rotRadiusY = Math.round(
+      (this.random() * (maxRotRadiusY - minRotRadiusY) + minRotRadiusY) *
+        cell.radius,
+    );
+
+    rotRadiusY = Math.max(rotRadiusX, rotRadiusY); // The y rotation radius must be larger than the x radius
+
+    // Calculate the centre of rotation
+    const mult = clockwise ? 1 : -1;
+    const rotCentreX = Math.round(
+      fractal.x +
+        mult * Math.cos((currentStep * 2 * Math.PI) / cycleLength) * rotRadiusX,
+    );
+
+    const rotCentreY = Math.round(
+      fractal.y +
+        Math.sin((currentStep * 2 * Math.PI) / cycleLength) * rotRadiusY,
+    );
+
+    return {
+      cycleLength,
+      maxRadius,
+      maxRadiusStep,
+      currentStep,
+      clockwise,
+      rotRadiusX,
+      rotRadiusY,
+      rotCentreX,
+      rotCentreY,
     };
   }
 
@@ -603,7 +887,7 @@ export class CloudBuilder {
           }
           // TODO: store separately to keep with sim
 
-          this.fillCircles.push({
+          this.horizontalFillCircles.push({
             x,
             y: line.y,
             radius,

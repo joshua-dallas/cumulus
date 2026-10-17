@@ -17,6 +17,8 @@ import {
 // TODO: Smooth transition line width and y offset between segments (have a flag for this)
 // TODO: Set a flag in finalise renderer that is checked in draw
 // TODO: Will it improve performance to round long decimal values to 3sf?
+// TODO: When animating, find the affected lines
+// TODO: Add padding in the add layer section instead of at draw
 
 // Performance boosts
 // - Compute noise once and save
@@ -56,7 +58,7 @@ export class EtchRenderer {
     this.shadowDiagonalXOrigin =
       this.canvas.getBoundingClientRect().width * 0.7; // TODO: Is there a better way given the resize()?
     this.shadowDiagonalDirection = "left"; // Shadow to the left side
-    this.shadowDiagonalAngle = (4 * Math.PI) / 5;
+    this.shadowDiagonalAngle = (5 * Math.PI) / 6;
     this.shadowDiagonalEdgeNoise = 30;
 
     // Random number generation
@@ -360,7 +362,7 @@ export class EtchRenderer {
 
   drawLine(line) {
     // Find the shadow diagonal crossing for this line, if there is one
-    const shadowPaddingFactor = 0.4; // How much to attenuate padding in the shadow region TODO: move to top
+    const shadowPaddingFactor = 0; // How much to attenuate padding in the shadow region TODO: move to top
 
     // For each final segment, draw a line to the canvas
     for (let i = 0; i < line.segments.length; i++) {
@@ -697,7 +699,7 @@ export class EtchRenderer {
 
     if (wavePeriod == this.defaultWavePeriod) {
       // We can use the precalculated values
-      return this.baseYOffset[line.id][xDrawStep] * waveAmplitude * yNoise;
+      return this.baseYOffset[line.id][xDrawStep] * waveAmplitude + yNoise;
     }
 
     // If there is a custom wave period, calculate using sine.
