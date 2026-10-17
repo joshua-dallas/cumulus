@@ -51,6 +51,7 @@ A cloud is modelled as three kinds of shape, built by `CloudBuilder` (`src/lib/c
 npm install
 npm run dev     # then open /demo/
 npm run build   # library output in dist/
+npm run lint    # ESLint
 ```
 
 There are no tests yet.
@@ -83,12 +84,16 @@ There are no tests yet.
 - [x] Rename `EtchRenderer` / `etch-render.js` to `HatchedRenderer` / `hatched-renderer.js`.
 - [x] Theme object for the colour palette and layer styles.
 - [x] Separate simulation module; separate element and controller.
+- [x] Layer left/right padding is applied when segments are added rather than when drawing. It is treated as an extension of the layer (gap segments), so it stays visible even if the layer is covered.
+- [x] Fixed: padding was not honoured next to segments narrower than the padding (e.g. near the edge of fill circles); padding is now a fixed-width gap regardless of the segments beneath.
+- [x] Fixed: the inner fill polygon could add a segment with an undefined end when a line only touched one of its vertical edges.
 - [x] Cells addressed by id (`cellsById` map) rather than array index.
 - [x] Fixed: `line.segments` typo, and falsy `0` in the edge-noise cache (this affected both left and right edges; edge noise is now cached per layer key).
 - [x] `seed="0"` is allowed; mouse-leave clears the cursor (`null`); removed debug `console.log`s and the debug draw helpers.
 - [ ] Randomise the seed when none is provided; use the element seed for the renderer's noise.
 - [ ] Public API for changing the theme/colours (e.g. a `theme` property or CSS custom properties).
-- [ ] Add a lint script, a test setup (seeded builder output is easy to snapshot), and a README demo image.
+- [x] Lint script (`npm run lint`).
+- [ ] Add a test setup (seeded builder output is easy to snapshot), and a README demo image.
 - [ ] Package metadata: `package.json` is still version `1.0.0` with no description or license field; confirm `LICENCE` choice.
 
 ### Open TODOs from the source

@@ -6,13 +6,13 @@ Guidance for working in this repo. Keep it in sync when the architecture changes
 
 `<cumulus-canvas>` is a custom HTML element that draws a generative cumulus cloud on a `<canvas>` in a hand-hatched style: the image is made of thousands of short, slightly wavy horizontal strokes whose colour encodes shade. A numeric `seed` fully determines the cloud's shape.
 
-Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`vite.config.js`, ES format, two entries: `cumulus` and `define`). Tailwind is used only by the demo page. ESLint config exists but there is no lint script. There are no tests (`test/` is empty).
+Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`vite.config.js`, ES format, two entries: `cumulus` and `define`). Tailwind is used only by the demo page. ESLint is configured (`npm run lint`). There are no tests (`test/` is empty).
 
 ## Commands
 
 - `npm run dev` – Vite dev server; open `/demo/` (demo imports `../src/define.js`).
 - `npm run build` – library build to `dist/` (gitignored).
-- `npx eslint src` – lint (no npm script yet).
+- `npm run lint` – ESLint over `src`.
 
 ## Layout
 
@@ -72,11 +72,13 @@ attributes / resize / reduced-motion change
 
 Constructed as `(canvas, width, height, lineWidth, lineSpacing)`. Width/height are logical CSS pixels passed in; the renderer does not measure the DOM.
 
-Core model: the canvas is divided into horizontal **lines** (`generateLines`, spacing = `lineWidth + lineSpacing`). Each line holds an ordered, non-overlapping list of **segments** `{startX, endX, layerId, isBackground, leftCoveredByLayer, rightCoveredByLayer}`.
+Core model: the canvas is divided into horizontal **lines** (`generateLines`, spacing = `lineWidth + lineSpacing`). Each line holds an ordered, non-overlapping list of **segments** `{startX, endX, layerId, isBackground, isGap, under?}`.
 
 - `addBackground` puts one full-width background segment on each line.
-- `addCircleLayer` / `addRightAnglePolygonLayer` register a layer (config incl. `fill`, `key`, edge noise, padding, `lineWidth`, wave params) and add a segment to every line it crosses. `addSegment` paints over whatever is beneath: it binary-searches the sorted list and splices the new segment in (no re-sort), so **layer insertion order = z-order**. The `*CoveredByLayer` flags record which ends were trimmed by something on top.
-- `draw` → `drawLine` → `drawSegment`: walks each segment in `DRAW_STEP` (2px) increments and issues one `stroke()` per step with its own colour, width and y-wiggle (line breaks skip the stroke). Left/right padding of neighbouring layers shrinks a segment's ends (suppressed in shadow).
+- `addCircleLayer` / `addRightAnglePolygonLayer` register a layer (config incl. `fill`, `key`, edge noise, padding, `lineWidth`, wave params) and add a segment to every line it crosses. `addSegment` paints over whatever is beneath: it binary-searches the sorted list and splices the new segment in (no re-sort), so **layer insertion order = z-order**.
+- `draw` → `drawLine` → `drawSegment`: walks each segment in `DRAW_STEP` (2px) increments and issues one `stroke()` per step with its own colour, width and y-wiggle (line breaks skip the stroke). Gap segments (padding, see below) are not drawn; `drawSegmentRange` handles the shadow case.
+- **Padding is part of the layer.** `addLayerSegment` (used by both `add*Layer` methods) adds the layer's segment *and* its padding to each line: `leftPadding` / `rightPadding` become **gap segments** (`isGap: true`, same `layerId`) next to the layer's edges, clipped to the line. A gap is inserted at the layer's place in the order, clearing whatever is underneath, and later layers paint over it like anything else. So padding stays visible even when the layer it belongs to is covered, and a gap is as wide as the padding however narrow the segments it clears. Gaps are never stroked.
+- **Gaps and shadow:** there is no padding in shadow. A gap records what it cleared in `under` (clipped copies, taken in `addSegment` when the gap is inserted; the remainders of a split gap share it), and `drawSegmentRange` draws `under` instead of the gap for the part of the gap in shadow (`getShadowRange`, evaluated at draw time because the shadow can move). Anything that creates segments must keep `under` correct for gaps.
 - **Shadow diagonal**: a per-line x (`shadowDiagonalLocations`, from the theme's `shadowDiagonal`). Non-background strokes on the shadow side use `colours.dark2`. Computed once in `finaliseRenderer`.
 - **Noise** is pre-generated per line (`initialiseNoise`) from a renderer-local PRNG (`seed = 10`, hardcoded). **Edge noise is cached by layer `key`** (`noise.layerEdge`: key → per-line left/right arrays), so a shape keeps its edge between frames even if layers are added/removed. Every layer should pass a stable `key` (`cell-4`, `light-fractal-4-7`, `fill-0`, ...); without one it falls back to the layer index.
 - `baseYOffset` caches the default sine wave per line/step; layers with a custom `wavePeriod` compute `Math.sin` live.
@@ -114,7 +116,7 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 
 ## Testing
 
-No test suite. Useful checks when changing the builder: dump `cells`, fractals, `fillCircles`, `horizontalFillCircles`, `cloudInnerLeft/Right` for a grid of seeds/sizes before and after, and diff them (the output must be identical unless a change is intended). Renderer `addSegment` was verified against the previous sort-based implementation with randomised inserts. For browser behaviour, headless Chrome driven over the DevTools protocol works (`--force-prefers-reduced-motion` for the reduced-motion path); `--virtual-time-budget` does not run animation frames reliably, so use real time.
+No test suite. Useful checks when changing the builder: dump `cells`, fractals, `fillCircles`, `horizontalFillCircles`, `cloudInnerLeft/Right` for a grid of seeds/sizes before and after, and diff them (the output must be identical unless a change is intended). Renderer `addSegment`/padding was verified with a painter's-algorithm oracle: log every `addSegment` call, repaint them in order at sample x positions, and compare with the segment list (with and without shadow) and with what `drawLine` draws, on random layer sequences and on real clouds. For browser behaviour, headless Chrome driven over the DevTools protocol works (`--force-prefers-reduced-motion` for the reduced-motion path); `--virtual-time-budget` does not run animation frames reliably, so use real time.
 
 ## Planned work
 

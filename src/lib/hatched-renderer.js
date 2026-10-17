@@ -11,7 +11,6 @@ import { getVerticalLinesOfPolygon, mulberry32 } from "./utils.js";
 // TODO: Set a flag in finalise renderer that is checked in draw
 // TODO: Will it improve performance to round long decimal values to 3sf?
 // TODO: When animating, find the affected lines
-// TODO: Add padding in the add layer section instead of at draw
 
 // Performance boosts
 // - Compute noise once and save
@@ -237,6 +236,27 @@ export class HatchedRenderer {
     }
   }
 
+  // Adds a layer's segment to a line, along with the padding beside it.
+  //
+  // Padding is treated as part of the layer, an extension of it: it is added
+  // at the same point in the layer order, as empty segments (gaps) that clear
+  // whatever is underneath. Layers added afterwards draw over a gap like
+  // anything else, so a gap stays visible even if the layer it belongs to is
+  // covered. A gap remembers what it cleared so that it can be skipped in shadow.
+  addLayerSegment(line, startX, endX, layer) {
+    const leftGapStart = Math.max(startX - (layer.leftPadding || 0), line.startX);
+    if (leftGapStart < startX) {
+      this.addSegment(line.id, leftGapStart, startX, layer.id, false, true);
+    }
+
+    const rightGapEnd = Math.min(endX + (layer.rightPadding || 0), line.endX);
+    if (rightGapEnd > endX) {
+      this.addSegment(line.id, endX, rightGapEnd, layer.id, false, true);
+    }
+
+    this.addSegment(line.id, startX, endX, layer.id, false);
+  }
+
   addCircleLayer(config) {
     // Save the layer config
     const layerId = this.layers.length;
@@ -266,7 +286,7 @@ export class HatchedRenderer {
       // Don't add a zero length segment
       if (startX >= endX) continue;
 
-      this.addSegment(line.id, startX, endX, layerId, false);
+      this.addLayerSegment(line, startX, endX, layer);
     }
   }
 
@@ -302,6 +322,10 @@ export class HatchedRenderer {
         range.splice(1, 1);
       }
 
+      // A line that only touches the polygon at a vertex crosses a single
+      // vertical edge, which is not enough to make a segment
+      if (range.length < 2) continue;
+
       // calculate the segment to add
       let startX = range[0];
       let endX = range[1];
@@ -314,7 +338,7 @@ export class HatchedRenderer {
       // Don't add a zero length segment
       if (startX >= endX) continue;
 
-      this.addSegment(line.id, startX, endX, layerId, false);
+      this.addLayerSegment(line, startX, endX, layer);
     }
   }
 
@@ -367,33 +391,41 @@ export class HatchedRenderer {
   }
 
   drawLine(line) {
-    // Find the shadow diagonal crossing for this line, if there is one
-    const shadowPaddingFactor = 0; // How much to attenuate padding in the shadow region TODO: move to top
-
     // For each final segment, draw a line to the canvas
-    for (let i = 0; i < line.segments.length; i++) {
-      const segment = line.segments[i];
+    const shadowRange = this.getShadowRange(line);
+    for (const segment of line.segments) {
+      this.drawSegmentRange(
+        segment,
+        segment.startX,
+        segment.endX,
+        line,
+        shadowRange,
+      );
+    }
+  }
 
-      // Check for right-padding in the left neighbour
-      // This would be implemented by shifting the left point of this segment
-      let startXOffset = this.getStartXOffsetFromPadding(i, line);
-      if (this.isInShadow(segment.startX, line)) {
-        startXOffset *= shadowPaddingFactor;
-      }
+  // Draws the part of a segment between x1 and x2.
+  // Gaps (padding) are not drawn, except in shadow, where there is no padding
+  // and what the gap cleared is drawn instead
+  drawSegmentRange(segment, x1, x2, line, shadowRange) {
+    if (x2 <= x1) return;
 
-      // Check for left-padding in the right neighbour
-      // This would be implemented by shifting the right point of this segment
-      let endXOffset = this.getEndXOffsetFromPadding(i, line);
-      if (this.isInShadow(segment.endX, line)) {
-        endXOffset *= shadowPaddingFactor;
-      }
+    if (!segment.isGap) {
+      this.drawSegment(x1, x2, line, segment);
+      return;
+    }
 
-      const actualStartX = segment.startX + startXOffset;
-      const actualEndX = segment.endX - endXOffset;
-
-      if (actualEndX <= actualStartX) continue;
-
-      this.drawSegment(actualStartX, actualEndX, line, segment);
+    if (!shadowRange) return;
+    const shadowX1 = Math.max(x1, shadowRange.from);
+    const shadowX2 = Math.min(x2, shadowRange.to);
+    for (const cleared of segment.under) {
+      this.drawSegmentRange(
+        cleared,
+        Math.max(cleared.startX, shadowX1),
+        Math.min(cleared.endX, shadowX2),
+        line,
+        shadowRange,
+      );
     }
   }
 
@@ -485,38 +517,6 @@ export class HatchedRenderer {
     return [colour, lineWidth, lineBreak];
   }
 
-  getStartXOffsetFromPadding(segmentId, line) {
-    // Check for right-padding in the left neighbour
-    // This would be implemented by shifting the left point of this segment
-    let startXOffset = 0;
-    if (segmentId > 0) {
-      const leftNeighbour = line.segments[segmentId - 1];
-      const leftNeighbourLayer =
-        this.layers[leftNeighbour.layerId] || undefined;
-      if (leftNeighbourLayer && !leftNeighbour.rightCoveredByLayer) {
-        startXOffset = leftNeighbourLayer.rightPadding || 0;
-      }
-    }
-
-    return startXOffset;
-  }
-
-  getEndXOffsetFromPadding(segmentId, line) {
-    // Check for left-padding in the right neighbour
-    // This would be implemented by shifting the right point of this segment
-    let endXOffset = 0;
-    if (segmentId < line.segments.length - 1) {
-      const rightNeighbour = line.segments[segmentId + 1];
-      const rightNeighbourLayer =
-        this.layers[rightNeighbour.layerId] || undefined;
-      if (rightNeighbourLayer && !rightNeighbour.leftCoveredByLayer) {
-        endXOffset = rightNeighbourLayer.leftPadding || 0;
-      }
-    }
-
-    return endXOffset;
-  }
-
   getStrokeColour(x1, segment, line) {
     const xDrawStep = Math.floor(
       // TODO: Find a cleaner way to do this. Maybe a function, or store the value of bounding client
@@ -563,6 +563,16 @@ export class HatchedRenderer {
     return false;
   }
 
+  // The x range of the line that is in shadow, or undefined if there is none
+  getShadowRange(line) {
+    if (!this.hasShadowDiagonal) return undefined;
+
+    const shadowDiagonalX = this.shadowDiagonalLocations[line.id];
+    return this.shadowDiagonalDirection == "left"
+      ? { from: -Infinity, to: shadowDiagonalX }
+      : { from: shadowDiagonalX, to: Infinity };
+  }
+
   getShadowCrossingForLine(line) {
     const y = line.y;
     // Remember: Positive y is down, but we have specified the angle from the bottom x-axis
@@ -585,12 +595,12 @@ export class HatchedRenderer {
     return this.lines.filter((line) => line.y >= startY && line.y <= endY);
   }
 
-  addSegment(lineId, startX, endX, layerId, isBackground) {
+  addSegment(lineId, startX, endX, layerId, isBackground, isGap = false) {
     // Segments on a line are kept sorted by startX and mutually exclusive.
     // The new segment is written over whatever is underneath it, so it is
     // spliced straight into the right place and the list never needs a re-sort.
     const segments = this.lines[lineId].segments;
-    const newSegment = { startX, endX, layerId, isBackground };
+    const newSegment = { startX, endX, layerId, isBackground, isGap };
 
     // Binary search for the first segment that ends beyond the new start
     let first = 0;
@@ -615,21 +625,30 @@ export class HatchedRenderer {
       const firstOverlapped = segments[first];
       const lastOverlapped = segments[end - 1];
 
+      // A gap keeps what it covers, clipped to the gap, for drawing in shadow
+      if (isGap) {
+        newSegment.under = segments.slice(first, end).map((covered) => ({
+          ...covered,
+          startX: Math.max(covered.startX, startX),
+          endX: Math.min(covered.endX, endX),
+        }));
+      }
+
       // The right-hand remainder must be copied before the left one is trimmed,
       // as both can come from the same segment (the new one splits it in two)
       const rightRemainder =
         lastOverlapped.endX > endX
-          ? { ...lastOverlapped, startX: endX, leftCoveredByLayer: true }
+          ? { ...lastOverlapped, startX: endX }
           : undefined;
 
       if (firstOverlapped.startX < startX) {
         firstOverlapped.endX = startX;
-        firstOverlapped.rightCoveredByLayer = true;
         replacement.push(firstOverlapped);
       }
       replacement.push(newSegment);
       if (rightRemainder) replacement.push(rightRemainder);
     } else {
+      if (isGap) newSegment.under = [];
       replacement.push(newSegment);
     }
 
