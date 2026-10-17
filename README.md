@@ -52,9 +52,10 @@ npm install
 npm run dev     # then open /demo/
 npm run build   # library output in dist/
 npm run lint    # ESLint
+npm test        # unit tests (no browser needed)
 ```
 
-There are no tests yet.
+Tests use Node's built-in runner and run without a browser. The custom element itself (attributes, observers) is not covered yet, as it needs a DOM.
 
 ## Roadmap
 
@@ -93,7 +94,8 @@ There are no tests yet.
 - [ ] Randomise the seed when none is provided; use the element seed for the renderer's noise.
 - [ ] Public API for changing the theme/colours (e.g. a `theme` property or CSS custom properties).
 - [x] Lint script (`npm run lint`).
-- [ ] Add a test setup (seeded builder output is easy to snapshot), and a README demo image.
+- [x] Unit tests for the builder, simulation, renderer and controller (`npm test`).
+- [ ] Tests for the custom element (needs a DOM, e.g. jsdom or a browser), and a README demo image.
 - [ ] Package metadata: `package.json` is still version `1.0.0` with no description or license field; confirm `LICENCE` choice.
 
 ### Open TODOs from the source

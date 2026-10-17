@@ -6,13 +6,14 @@ Guidance for working in this repo. Keep it in sync when the architecture changes
 
 `<cumulus-canvas>` is a custom HTML element that draws a generative cumulus cloud on a `<canvas>` in a hand-hatched style: the image is made of thousands of short, slightly wavy horizontal strokes whose colour encodes shade. A numeric `seed` fully determines the cloud's shape.
 
-Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`vite.config.js`, ES format, two entries: `cumulus` and `define`). Tailwind is used only by the demo page. ESLint is configured (`npm run lint`). There are no tests (`test/` is empty).
+Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`vite.config.js`, ES format, two entries: `cumulus` and `define`). Tailwind is used only by the demo page. ESLint is configured (`npm run lint`). Tests are in `test/` (see Testing).
 
 ## Commands
 
 - `npm run dev` – Vite dev server; open `/demo/` (demo imports `../src/define.js`).
 - `npm run build` – library build to `dist/` (gitignored).
-- `npm run lint` – ESLint over `src`.
+- `npm run lint` – ESLint over `src` and `test`.
+- `npm test` – unit tests (Node's built-in runner, no DOM needed).
 
 ## Layout
 
@@ -116,7 +117,21 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 
 ## Testing
 
-No test suite. Useful checks when changing the builder: dump `cells`, fractals, `fillCircles`, `horizontalFillCircles`, `cloudInnerLeft/Right` for a grid of seeds/sizes before and after, and diff them (the output must be identical unless a change is intended). Renderer `addSegment`/padding was verified with a painter's-algorithm oracle: log every `addSegment` call, repaint them in order at sample x positions, and compare with the segment list (with and without shadow) and with what `drawLine` draws, on random layer sequences and on real clouds. For browser behaviour, headless Chrome driven over the DevTools protocol works (`--force-prefers-reduced-motion` for the reduced-motion path); `--virtual-time-budget` does not run animation frames reliably, so use real time.
+`npm test` runs `node --test test/*.test.js`: plain Node, no DOM, no dependencies. `test/helpers.js` provides a mock canvas (a no-op 2D context that records event listeners) and a fake, manually stepped `requestAnimationFrame`; import it first in tests that touch the renderer or controller.
+
+| File | Covers |
+| --- | --- |
+| `utils.test.js` | PRNG determinism, range maths, `clamp` |
+| `cloud-builder.test.js` | determinism per seed, **golden hash for seed 323** (fails if `random()` call order changes), id lookup, fractal grouping, base locations, fill updates |
+| `cloud-simulation.test.js` | rest, mouse push, limits, return to base |
+| `hatched-renderer.test.js` | `addSegment` overwrite/split, padding as gap segments (full width, persists when covered, shadow), edge-noise cache, `clear()` |
+| `cumulus-controller.test.js` | layer building and keys, animate on/off, pause/resume/destroy, only redraw when something moved, theme |
+
+The `Cumulus` element (`src/cumulus.js`) needs a DOM and is not covered: attribute rebuilds, `ResizeObserver`, `IntersectionObserver` and reduced motion were checked by hand in headless Chrome over the DevTools protocol (`--force-prefers-reduced-motion` for the reduced-motion path; `--virtual-time-budget` does not run animation frames reliably, so use real time).
+
+If the golden hash test fails after a deliberate change to generation, every existing seed now makes a different cloud: update the hash on purpose. Otherwise a `this.random()` call was added, removed or reordered.
+
+Useful extra check when changing the renderer's segment logic: log every `addSegment` call, repaint them in order at sample x positions (a painter's-algorithm oracle), and compare with the segment list and with what `drawLine` draws.
 
 ## Planned work
 
