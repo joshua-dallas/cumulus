@@ -9,6 +9,46 @@ export function mulberry32(seed) {
   };
 }
 
+// Smooth ease from 0 to 1 whose slope is 0 at both ends (Perlin's "fade").
+// It makes the noise flow through each node instead of kinking at it
+function fade(t) {
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+// 1-D Perlin (gradient) noise: a smooth, wandering line of values, like the
+// drift of a pen, rather than independent random values.
+//
+//   random    a function returning numbers in [0, 1), e.g. from mulberry32
+//   length    how many values to return
+//   numNodes  how many nodes the values are spread across (at least 2). Each
+//             node gets a random slope, and the values are a smooth blend of
+//             the slopes of the two nodes either side. More nodes means faster
+//             wandering, fewer means long, slow drifts. The noise is 0 at a node
+//   scale     multiplies the values. With a scale of 1 they are in [-0.5, 0.5],
+//             the same as (random() - 0.5), so it can replace that directly
+//
+// Uses numNodes random numbers.
+export function perlinNoise1D(random, length, numNodes, scale = 1) {
+  const nodes = Math.max(2, Math.floor(numNodes));
+  const slopes = Array.from({ length: nodes }, () => random() * 2 - 1);
+
+  const values = [];
+  for (let i = 0; i < length; i++) {
+    // Where this value is along the nodes: 0 is the first node, nodes - 1 the last
+    const position = length > 1 ? (i * (nodes - 1)) / (length - 1) : 0;
+    const node = Math.min(Math.floor(position), nodes - 2);
+    const t = position - node; // how far from this node to the next, 0 to 1
+
+    // Each of the two nodes says where the line would be if it followed its slope
+    // to this point, and the fade blends them
+    const fromLeft = slopes[node] * t;
+    const fromRight = slopes[node + 1] * (t - 1);
+    const blend = fade(t);
+    values.push((fromLeft + blend * (fromRight - fromLeft)) * scale);
+  }
+  return values;
+}
+
 export function intersection(a, b) {
   const intersectionStart = Math.max(a[0], b[0]);
   const intersectionEnd = Math.min(a[1], b[1]);

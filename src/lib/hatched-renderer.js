@@ -1,4 +1,8 @@
-import { getVerticalLinesOfPolygon, mulberry32 } from "./utils.js";
+import {
+  getVerticalLinesOfPolygon,
+  mulberry32,
+  perlinNoise1D,
+} from "./utils.js";
 
 // TODO: Use typescript and custom types for layer, line and segment
 // TODO: Should I use get/set patterns to trigger re-render?
@@ -22,7 +26,8 @@ export class HatchedRenderer {
   static PROB_LINE_BREAK = 0.0009;
   static WAVE_X_NOISE_RANGE = 8;
   static LINE_Y_NOISE_RANGE = 0.4;
-  static LINE_WIDTH_NOISE_RANGE = 0.3;
+  static LINE_WIDTH_NOISE_RANGE = 0.7; // The scale of the line width noise
+  static LINE_WIDTH_NOISE_NODES = 20; // Perlin nodes along a line: more means faster wandering
 
   // width and height are the logical (CSS pixel) size of the drawing area.
   // They are passed in, rather than measured from the canvas, so the renderer
@@ -149,22 +154,31 @@ export class HatchedRenderer {
     this.noise.waveXOffset = this.lines.map(() =>
       Math.round((this.random() - 0.5) * HatchedRenderer.WAVE_X_NOISE_RANGE),
     );
-    // 1D Perlin noise per line (1 value for each draw step)
+    // Noise per line, 1 value for each draw step
     // TODO: Edge noise with perlin
     this.noise.yOffset = this.lines.map(() =>
       [...Array(numXSteps).keys()].map(
         () => (this.random() - 0.5) * HatchedRenderer.LINE_Y_NOISE_RANGE,
       ),
     );
+    // The width of the line wanders smoothly, like a pen, as Perlin noise.
+    // It has its own random stream so that the other noise does not change if
+    // the number of nodes is changed
+    const widthRandom = mulberry32(this.seed + 1);
     this.noise.lineWidth = this.lines.map(() =>
-      [...Array(numXSteps).keys()].map(
-        () => (this.random() - 0.5) * HatchedRenderer.LINE_WIDTH_NOISE_RANGE,
+      perlinNoise1D(
+        widthRandom,
+        numXSteps,
+        HatchedRenderer.LINE_WIDTH_NOISE_NODES,
+        HatchedRenderer.LINE_WIDTH_NOISE_RANGE,
       ),
     );
     // Uniform random variable per draw step
     this.noise.lightness = this.lines.map(() =>
       [...Array(numXSteps).keys()].map(() =>
-        Math.round((this.random() - 0.5) * HatchedRenderer.LIGHTNESS_NOISE_RANGE),
+        Math.round(
+          (this.random() - 0.5) * HatchedRenderer.LIGHTNESS_NOISE_RANGE,
+        ),
       ),
     );
     // This could also be saved as the uniform variable and check the threshold in draw
@@ -244,7 +258,10 @@ export class HatchedRenderer {
   // anything else, so a gap stays visible even if the layer it belongs to is
   // covered. A gap remembers what it cleared so that it can be skipped in shadow.
   addLayerSegment(line, startX, endX, layer) {
-    const leftGapStart = Math.max(startX - (layer.leftPadding || 0), line.startX);
+    const leftGapStart = Math.max(
+      startX - (layer.leftPadding || 0),
+      line.startX,
+    );
     if (leftGapStart < startX) {
       this.addSegment(line.id, leftGapStart, startX, layer.id, false, true);
     }

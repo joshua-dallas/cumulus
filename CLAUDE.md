@@ -28,7 +28,7 @@ Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`
 | `src/lib/cloud-simulation.js` | `CloudSimulation`: moves cells/fractals over time (currently the mouse effect; `fractalSim` and `moveCloudCells` exist but are not called). Has its own PRNG. |
 | `src/lib/hatched-renderer.js` | `HatchedRenderer`: turns layers into per-scanline segments and strokes them. |
 | `src/lib/theme.js` | `defaultTheme` / `createTheme()`: colour palette, background/shadow settings and per-layer styles. |
-| `src/lib/utils.js` | `mulberry32` PRNG, 1-D range maths, polygon edge extraction, `clamp`, `distanceBetweenPoints`. |
+| `src/lib/utils.js` | `mulberry32` PRNG, `perlinNoise1D`, 1-D range maths, polygon edge extraction, `clamp`, `distanceBetweenPoints`. |
 | `demo/` | Demo page + Tailwind stylesheet. |
 
 ## Data flow
@@ -92,7 +92,7 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 - **Padding is part of the layer.** `addLayerSegment` (used by both `add*Layer` methods) adds the layer's segment *and* its padding to each line: `leftPadding` / `rightPadding` become **gap segments** (`isGap: true`, same `layerId`) next to the layer's edges, clipped to the line. A gap is inserted at the layer's place in the order, clearing whatever is underneath, and later layers paint over it like anything else. So padding stays visible even when the layer it belongs to is covered, and a gap is as wide as the padding however narrow the segments it clears. Gaps are never stroked.
 - **Gaps and shadow:** there is no padding in shadow. A gap records what it cleared in `under` (clipped copies, taken in `addSegment` when the gap is inserted; the remainders of a split gap share it), and `drawSegmentRange` draws `under` instead of the gap for the part of the gap in shadow (`getShadowRange`, evaluated at draw time because the shadow can move). Anything that creates segments must keep `under` correct for gaps.
 - **Shadow diagonal**: a per-line x (`shadowDiagonalLocations`, from the theme's `shadowDiagonal`). Non-background strokes on the shadow side use `colours.dark2`. Computed once in `finaliseRenderer`.
-- **Noise** is pre-generated per line (`initialiseNoise`) from a renderer-local PRNG (`seed = 10`, hardcoded). **Edge noise is cached by layer `key`** (`noise.layerEdge`: key → per-line left/right arrays), so a shape keeps its edge between frames even if layers are added/removed. Every layer should pass a stable `key` (`cell-4`, `light-fractal-4-7`, `fill-0`, ...); without one it falls back to the layer index.
+- **Noise** is pre-generated per line (`initialiseNoise`) from a renderer-local PRNG (`seed = 10`, hardcoded). **Line width noise is 1-D Perlin noise** (`perlinNoise1D`: `LINE_WIDTH_NOISE_NODES` nodes along each line, scaled by `LINE_WIDTH_NOISE_RANGE`), so the width drifts like a pen; it uses its own PRNG stream (`seed + 1`) so changing the node count does not change the other noise. Perlin rarely reaches its maximum, so at the same range it is about half as strong as the old uniform noise (std dev 0.04 vs 0.09); raise the range to compensate. The other noise (y offset, lightness, line breaks, edge) is still uniform random. **Edge noise is cached by layer `key`** (`noise.layerEdge`: key → per-line left/right arrays), so a shape keeps its edge between frames even if layers are added/removed. Every layer should pass a stable `key` (`cell-4`, `light-fractal-4-7`, `fill-0`, ...); without one it falls back to the layer index.
 - `baseYOffset` caches the default sine wave per line/step; layers with a custom `wavePeriod` compute `Math.sin` live.
 - `applyTheme(theme)` must be called before `finaliseRenderer()` (noise depends on it). `colours` is the theme's object by reference, so mutating a colour in place restyles the next frame.
 - `resize()` sets canvas pixel size from `width/height × devicePixelRatio` and scales the context. Setting `canvas.width` resets the context, so the renderer is created after sizing.
@@ -133,10 +133,10 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 
 | File | Covers |
 | --- | --- |
-| `utils.test.js` | PRNG determinism, range maths, `clamp` |
+| `utils.test.js` | PRNG determinism, range maths, `clamp`, `perlinNoise1D` (bounds, zero at nodes, scale, smoothness, node count) |
 | `cloud-builder.test.js` | determinism per seed, **golden hash for seed 323** (fails if `random()` call order changes), id lookup, fractal grouping, base locations, fill updates |
 | `cloud-simulation.test.js` | rest, mouse push, limits, return to base |
-| `hatched-renderer.test.js` | `addSegment` overwrite/split, padding as gap segments (full width, persists when covered, shadow), edge-noise cache (including scaling with range), `clear()` |
+| `hatched-renderer.test.js` | `addSegment` overwrite/split, padding as gap segments (full width, persists when covered, shadow), edge-noise cache (including scaling with range), Perlin line width noise, `clear()` |
 | `easing.test.js` | endpoints and monotonic progress of the easing functions |
 | `cumulus-controller.test.js` | layer building and keys, animate on/off, pause/resume/destroy, only redraw when something moved, theme, grow-in (scale, eased progress, fractal lag, no jump after pause, finished cloud identical to a static one), click to regenerate (shrink, new seed, ignored clicks, instant without animation, pointer cursor) |
 

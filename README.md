@@ -104,9 +104,12 @@ Tests use Node's built-in runner and run without a browser. The custom element i
 - [ ] Randomise the seed when none is provided; use the element seed for the renderer's noise.
 - [ ] Public API for changing the theme/colours (e.g. a `theme` property or CSS custom properties).
 - [x] Lint script (`npm run lint`).
+- [x] Line width noise is 1-D Perlin noise (`perlinNoise1D` in `src/lib/utils.js`) so lines swell and thin smoothly, like a pen.
+- [ ] Use Perlin noise for the other per-step noise too (y offset, lightness) and for the edge noise.
 - [x] Unit tests for the builder, simulation, renderer and controller (`npm test`).
 - [ ] Tests for the custom element (needs a DOM, e.g. jsdom or a browser), and a README demo image.
-- [ ] Package metadata: `package.json` is still version `1.0.0` with no description or license field; confirm `LICENCE` choice.
+- [ ] **Add a licence before making the repo public.** `LICENCE` is currently an empty file; choose a licence, put its text in `LICENCE`, and add a matching `license` field to `package.json`. The repo is private until then.
+- [ ] Package metadata: `package.json` is still version `1.0.0` with no description.
 
 ### Open TODOs from the source
 

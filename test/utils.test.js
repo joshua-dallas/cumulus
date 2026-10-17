@@ -7,6 +7,7 @@ import {
   subtractRanges,
   intersectionOfMany,
   clamp,
+  perlinNoise1D,
 } from "../src/lib/utils.js";
 
 test("mulberry32 gives the same sequence for the same seed", () => {
@@ -52,4 +53,62 @@ test("clamp", () => {
   assert.equal(clamp(5, 0, 10), 5);
   assert.equal(clamp(-5, 0, 10), 0);
   assert.equal(clamp(15, 0, 10), 10);
+});
+
+// ---- perlinNoise1D -------------------------------------------------------------------------
+
+test("perlinNoise1D returns the requested number of values, the same ones for the same seed", () => {
+  const a = perlinNoise1D(mulberry32(1), 100, 8);
+  const b = perlinNoise1D(mulberry32(1), 100, 8);
+  assert.equal(a.length, 100);
+  assert.deepEqual(a, b);
+  assert.notDeepEqual(a, perlinNoise1D(mulberry32(2), 100, 8));
+});
+
+test("perlinNoise1D values stay within +-0.5 times the scale", () => {
+  for (const scale of [1, 0.3, 4]) {
+    for (let seed = 0; seed < 50; seed++) {
+      for (const value of perlinNoise1D(mulberry32(seed), 200, 10, scale)) {
+        assert.ok(Math.abs(value) <= 0.5 * scale + 1e-12);
+      }
+    }
+  }
+});
+
+test("perlinNoise1D is 0 at each node and the scale multiplies every value", () => {
+  // 5 nodes over 9 values: a node falls on every second value
+  const values = perlinNoise1D(mulberry32(3), 9, 5);
+  for (let i = 0; i < 9; i += 2) assert.equal(Math.abs(values[i]), 0); // (-0 counts)
+  assert.ok(values.some((value) => value !== 0));
+
+  const scaled = perlinNoise1D(mulberry32(3), 9, 5, 0.3);
+  scaled.forEach((value, i) => assert.ok(Math.abs(value - values[i] * 0.3) < 1e-12));
+});
+
+test("perlinNoise1D wanders smoothly: neighbouring values are close, unlike uniform noise", () => {
+  const meanStep = (values) =>
+    values.slice(1).reduce((sum, v, i) => sum + Math.abs(v - values[i]), 0) / (values.length - 1);
+
+  const random = mulberry32(5);
+  const uniform = Array.from({ length: 300 }, () => random() - 0.5);
+  const perlin = perlinNoise1D(mulberry32(5), 300, 15);
+  assert.ok(meanStep(perlin) < meanStep(uniform) / 5);
+});
+
+test("perlinNoise1D has slower drifts with fewer nodes", () => {
+  const crossings = (values) => values.slice(1).filter((v, i) => v * values[i] < 0).length;
+  const few = perlinNoise1D(mulberry32(9), 600, 4);
+  const many = perlinNoise1D(mulberry32(9), 600, 60);
+  assert.ok(crossings(few) < crossings(many));
+});
+
+test("perlinNoise1D uses one random number per node, and copes with small inputs", () => {
+  let draws = 0;
+  const counting = () => (draws++, 0.5);
+  perlinNoise1D(counting, 50, 7);
+  assert.equal(draws, 7);
+
+  assert.equal(perlinNoise1D(mulberry32(1), 20, 0).length, 20); // fewer than 2 nodes is treated as 2
+  assert.deepEqual(perlinNoise1D(mulberry32(1), 1, 5), [0]);
+  assert.deepEqual(perlinNoise1D(mulberry32(1), 0, 5), []);
 });

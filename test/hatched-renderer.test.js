@@ -149,6 +149,43 @@ test("edge noise scales with its range without being rolled again", () => {
   assert.equal(draws, 1);
 });
 
+test("line width noise is smooth Perlin noise within the noise range", () => {
+  const { renderer } = setup();
+  renderer.initialiseNoise();
+
+  const limit = HatchedRenderer.LINE_WIDTH_NOISE_RANGE / 2;
+  const widths = renderer.noise.lineWidth;
+  assert.equal(widths.length, renderer.lines.length);
+  for (const line of widths) {
+    assert.equal(line.length, renderer.numXSteps);
+    assert.ok(line.every((value) => Math.abs(value) <= limit + 1e-12));
+  }
+  // Neighbouring steps differ by far less than the range, so the width drifts like a pen
+  const steps = widths[0].slice(1).map((v, i) => Math.abs(v - widths[0][i]));
+  assert.ok(Math.max(...steps) < limit / 2);
+});
+
+test("changing the number of Perlin nodes does not change the other noise", () => {
+  const noiseWith = (nodes) => {
+    const original = HatchedRenderer.LINE_WIDTH_NOISE_NODES;
+    HatchedRenderer.LINE_WIDTH_NOISE_NODES = nodes;
+    try {
+      const { renderer } = setup();
+      renderer.initialiseNoise();
+      return renderer.noise;
+    } finally {
+      HatchedRenderer.LINE_WIDTH_NOISE_NODES = original;
+    }
+  };
+
+  const few = noiseWith(4);
+  const many = noiseWith(40);
+  assert.notDeepEqual(few.lineWidth, many.lineWidth);
+  assert.deepEqual(few.lightness, many.lightness);
+  assert.deepEqual(few.lineBreaks, many.lineBreaks);
+  assert.deepEqual(few.yOffset, many.yOffset);
+});
+
 test("clear() empties every line and puts the background back", () => {
   const { renderer, line } = setup();
   addLayer(renderer, line, 40, 60, {});
