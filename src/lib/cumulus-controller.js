@@ -147,13 +147,34 @@ export class CumulusController {
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
-  // Whether a point (in canvas pixels) is over one of the cells of the cloud
+  // Whether a point (in canvas pixels) is over the cloud: one of the cells, or the fill
   isOverCloud(x, y) {
-    return this.builder.cells.some((cell) => {
-      const dx = x - this.scaleX(cell.x);
-      const dy = y - this.scaleY(cell.y);
-      return dx * dx + dy * dy <= (cell.radius * this.scale) ** 2;
-    });
+    const inCircle = (circle) => {
+      const dx = x - this.scaleX(circle.x);
+      const dy = y - this.scaleY(circle.y);
+      return dx * dx + dy * dy <= (circle.radius * this.scale) ** 2;
+    };
+    return (
+      this.builder.cells.some(inCircle) ||
+      this.builder.fillCircles.some(inCircle) ||
+      this.builder.horizontalFillCircles.some(inCircle) ||
+      this.isInPolygon(x, y, this.builder.cloudInnerLeft) ||
+      this.isInPolygon(x, y, this.builder.cloudInnerRight)
+    );
+  }
+
+  // Whether a point is inside a polygon of vertices (at the current scale), by counting
+  // how many edges a ray going right from the point crosses
+  isInPolygon(x, y, vertices) {
+    let inside = false;
+    for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+      const ax = this.scaleX(vertices[i].x);
+      const ay = this.scaleY(vertices[i].y);
+      const bx = this.scaleX(vertices[j].x);
+      const by = this.scaleY(vertices[j].y);
+      if (ay > y !== by > y && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) inside = !inside;
+    }
+    return inside;
   }
 
   // Stops the loop and removes listeners. The controller cannot be reused.

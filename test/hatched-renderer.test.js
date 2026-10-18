@@ -306,3 +306,18 @@ test("clear() empties every line and puts the background back", () => {
   assert.equal(line.segments.length, 1);
   assert.equal(line.segments[0].isBackground, true);
 });
+
+test("the top and bottom lines get line breaks in a random number of places", () => {
+  const renderer = new HatchedRenderer(mockCanvas(), 600, 400, 1, 1.5);
+  renderer.generateLines();
+  renderer.applyTheme(createTheme());
+  renderer.finaliseRenderer();
+
+  const runs = (breaks) => breaks.join("").split("false").join(" ").trim().split(/ +/).filter((r) => r.includes("true")).length;
+  const top = renderer.noise.lineBreaks[0];
+  const bottom = renderer.noise.lineBreaks[renderer.lines.length - 1];
+  for (const breaks of [top, bottom]) {
+    assert.ok(breaks.filter(Boolean).length >= HatchedRenderer.EDGE_LINE_BREAK_MIN_WIDTH / 2 - 1);
+    assert.ok(runs(breaks) >= 1);
+  }
+});

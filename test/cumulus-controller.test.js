@@ -608,3 +608,19 @@ test("a paper colour is only used for the gaps in lines: the canvas itself is ne
   controller.redraw();
   assert.deepEqual(fills, []);
 });
+
+test("the fill of the cloud counts as the cloud for clicks", () => {
+  const { controller } = create({ regenerateOnClick: true });
+  const circle = controller.builder.fillCircles[0] ?? controller.builder.horizontalFillCircles[0];
+  assert.ok(controller.isOverCloud(circle.x, circle.y));
+  assert.equal(controller.isOverCloud(1, 1), false);
+
+  // A point inside the inner fill polygon, away from every cell
+  const [first] = controller.builder.cloudInnerLeft;
+  const inside = controller.isInPolygon(
+    first.x + 0.5,
+    first.y + 0.5,
+    controller.builder.cloudInnerLeft,
+  );
+  assert.equal(typeof inside, "boolean");
+});

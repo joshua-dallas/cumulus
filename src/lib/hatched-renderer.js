@@ -25,6 +25,11 @@ export class HatchedRenderer {
   static DRAW_STEP = 2;
   static LIGHTNESS_NOISE_RANGE = 13;
   static PROB_LINE_BREAK = 0.0009;
+  // The top and bottom lines get a random number of longer line breaks, at random places
+  static EDGE_LINE_BREAKS_MIN = 3;
+  static EDGE_LINE_BREAKS_MAX = 8;
+  static EDGE_LINE_BREAK_MIN_WIDTH = 6; // px
+  static EDGE_LINE_BREAK_MAX_WIDTH = 24; // px
   static WAVE_X_NOISE_RANGE = 8;
   static LINE_Y_NOISE_RANGE = 0.4;
   static LINE_WIDTH_NOISE_RANGE = 0.7; // The scale of the line width noise
@@ -223,6 +228,32 @@ export class HatchedRenderer {
         () => this.random() < HatchedRenderer.PROB_LINE_BREAK,
       ),
     );
+    this.addEdgeLineBreaks();
+  }
+
+  // Adds breaks to the top and bottom lines. They have their own random stream so
+  // that the other noise does not change
+  addEdgeLineBreaks() {
+    const random = mulberry32(this.seed + 2);
+    const {
+      EDGE_LINE_BREAKS_MIN: minCount,
+      EDGE_LINE_BREAKS_MAX: maxCount,
+      EDGE_LINE_BREAK_MIN_WIDTH: minWidth,
+      EDGE_LINE_BREAK_MAX_WIDTH: maxWidth,
+      DRAW_STEP,
+    } = HatchedRenderer;
+    const numXSteps = this.numXSteps;
+
+    for (const line of [this.lines[0], this.lines[this.lines.length - 1]]) {
+      if (!line) continue;
+      const count = minCount + Math.floor(random() * (maxCount - minCount + 1));
+      for (let i = 0; i < count; i++) {
+        const width = minWidth + random() * (maxWidth - minWidth);
+        const start = Math.floor(random() * numXSteps);
+        const end = Math.min(numXSteps, start + Math.max(1, Math.round(width / DRAW_STEP)));
+        for (let step = start; step < end; step++) this.noise.lineBreaks[line.id][step] = true;
+      }
+    }
   }
 
   generateLines() {
