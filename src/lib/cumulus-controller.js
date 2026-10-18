@@ -108,7 +108,7 @@ export class CumulusController {
     const { width, height, numCells } = this.config;
     this.seed = seed;
     this.builder = new CloudBuilder(width, height, numCells, seed);
-    this.simulation = new CloudSimulation(this.builder, seed);
+    this.simulation = new CloudSimulation(this.builder, seed, this.theme.interaction);
 
     // The cloud grows and shrinks about the middle of its base
     this.anchor = {
@@ -196,10 +196,13 @@ export class CumulusController {
     return true;
   }
 
-  // How much of the fractals (the fluff) have appeared. They lag behind the
-  // bodies of the cells, appearing once the cloud has mostly grown
+  // How much of the fractals (the fluff) have appeared. By default they grow with
+  // the cells. With theme.animation.fractalLag they lag behind the bodies of the
+  // cells, appearing once the cloud has mostly grown
   fractalScale() {
     if (this.scale >= 1) return 1; // exactly, so a finished cloud is never rounded
+    if (!this.theme.animation.fractalLag) return this.scale;
+
     const { fractalStart } = this.theme.animation;
     const progress = clamp01((this.scale - fractalStart) / (1 - fractalStart));
     return this.scale * easeInOutCubic(progress);
@@ -230,6 +233,7 @@ export class CumulusController {
 
     if (shouldRun && this.frameId === null) {
       this.lastTime = this.now(); // time spent paused does not count
+      this.simulation.resetCursor(); // and neither does where the mouse was
       this.frameId = requestAnimationFrame(this.tick);
     } else if (!shouldRun && this.frameId !== null) {
       cancelAnimationFrame(this.frameId);
@@ -246,7 +250,10 @@ export class CumulusController {
 
     // Fills and the picture only need updating if something moved or changed size
     const resized = this.advanceAnimation(dt);
-    const moved = this.simulation.step(this.cursor);
+    // The mouse only acts on a cloud that has finished growing, as until then what is
+    // drawn is not where the cells are
+    const cursor = this.scale === 1 ? this.cursor : null;
+    const moved = this.simulation.step(cursor, dt);
     if (moved) this.builder.updateFills();
     if (moved || resized) this.redraw();
   }

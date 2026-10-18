@@ -20,10 +20,12 @@ const create = (overrides = {}) => {
   return { canvas, controller };
 };
 
-// Runs animation frames, each 16ms after the last, for about this many ms
-const runFor = (ms) => {
-  for (let elapsed = 0; elapsed < ms; elapsed += 16) {
-    time += 16;
+// Runs animation frames for about this many ms. Each frame draws the whole cloud, so
+// frames are 50ms apart (60fps would take three times as long to test, and the
+// controller allows frames up to 100ms) unless a test needs finer steps
+const runFor = (ms, frameMs = 50) => {
+  for (let elapsed = 0; elapsed < ms; elapsed += frameMs) {
+    time += frameMs;
     frames.runFrame();
   }
 };
@@ -87,7 +89,7 @@ test("destroy stops the loop and removes the listeners", () => {
 });
 
 test("frames only recalculate fills and redraw when something moved", () => {
-  const { canvas, controller } = create();
+  const { controller } = create();
   let fillUpdates = 0;
   let draws = 0;
   const updateFills = controller.builder.updateFills.bind(controller.builder);
@@ -99,11 +101,60 @@ test("frames only recalculate fills and redraw when something moved", () => {
   frames.runFrame();
   assert.deepEqual([fillUpdates, draws], [0, 0]);
 
-  const cell = controller.builder.cells[0];
-  const move = canvas.listeners.find((l) => l.type === "mousemove");
-  move.handler({ clientX: cell.x - 5, clientY: cell.y });
+  controller.simulation.step = () => true; // something moves
   frames.runFrame();
   assert.deepEqual([fillUpdates, draws], [1, 1]);
+  controller.simulation.step = () => false; // and stops
+  frames.runFrame();
+  assert.deepEqual([fillUpdates, draws], [1, 1]);
+});
+
+test("brushing the mouse across the cloud moves its cells, and the loop stops redrawing once they are back", () => {
+  const { canvas, controller } = create();
+  let draws = 0;
+  const draw = controller.renderer.draw.bind(controller.renderer);
+  controller.renderer.draw = () => (draws++, draw());
+  const move = canvas.listeners.find((l) => l.type === "mousemove").handler;
+  const leave = canvas.listeners.find((l) => l.type === "mouseleave").handler;
+
+  // A stroke right across the cloud, about 1500px/s
+  const { dome } = controller.builder;
+  for (let i = 0; i <= 14; i++) {
+    move({ clientX: dome.x - 150 + i * 24, clientY: dome.y - dome.radius / 2 });
+    runFor(16, 16);
+  }
+  leave();
+  assert.ok(draws > 0);
+  const moved = controller.builder.cells.some((c) => c.x !== c.sim.baseLocation.x);
+  assert.ok(moved);
+
+  // The cells settle, and from then on nothing is redrawn
+  for (let i = 0; i < 400 && !controller.simulation.isSettled(); i++) runFor(100);
+  assert.ok(controller.simulation.isSettled());
+  runFor(100);
+  const drawsWhenSettled = draws;
+  runFor(500);
+  assert.equal(draws, drawsWhenSettled);
+});
+
+test("the mouse does not push the cloud while it is still growing", () => {
+  const { canvas, controller } = create({ growIn: true });
+  const move = canvas.listeners.find((l) => l.type === "mousemove").handler;
+  const { dome } = controller.builder;
+
+  for (let i = 0; i <= 14; i++) {
+    move({ clientX: dome.x - 150 + i * 24, clientY: dome.y - dome.radius / 2 });
+    runFor(16, 16);
+  }
+  assert.ok(controller.scale < 1);
+  assert.ok(controller.builder.cells.every((c) => c.x === c.sim.baseLocation.x));
+});
+
+test("the cursor position is tracked, and cleared when the mouse leaves", () => {
+  const { canvas, controller } = create();
+  const move = canvas.listeners.find((l) => l.type === "mousemove");
+  move.handler({ clientX: 120, clientY: 80 });
+  assert.deepEqual(controller.cursor, { x: 120, y: 80 });
 
   canvas.listeners.find((l) => l.type === "mouseleave").handler();
   assert.equal(controller.cursor, null);
@@ -154,8 +205,17 @@ test("a growing cloud is the full size cloud scaled about the middle of its base
   assert.ok(Math.abs(layer.y - (anchor.y + (cell.y - anchor.y) * scale)) < 1e-9);
 });
 
-test("fractals appear later than the cell bodies", () => {
+test("by default the fractals grow at the same time and rate as the cells", () => {
   const { controller } = create({ growIn: true });
+  for (const scale of [0.1, 0.3, 0.6, 0.9, 1]) {
+    controller.scale = scale;
+    assert.equal(controller.fractalScale(), scale);
+  }
+});
+
+test("with fractalLag the fractals appear later than the cell bodies", () => {
+  const { controller } = create({ growIn: true });
+  controller.theme.animation.fractalLag = true;
   const { growDuration, fractalStart } = controller.theme.animation;
 
   controller.scale = fractalStart / 2;
@@ -181,13 +241,13 @@ test("growIn is ignored when animation is off, so the cloud is there straight aw
 
 test("the grow animation does not jump ahead while paused", () => {
   const { controller } = create({ growIn: true });
-  runFor(160);
+  runFor(160, 16);
   const before = controller.scale;
 
   controller.setPageVisible(false);
   time += 60_000; // a minute in a background tab
   controller.setPageVisible(true);
-  runFor(32);
+  runFor(32, 16);
   assert.ok(controller.scale - before < 0.1);
   assert.equal(controller.phase, "growing");
 });

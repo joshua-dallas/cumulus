@@ -150,7 +150,9 @@ test("edge noise scales with its range without being rolled again", () => {
 });
 
 test("line width noise is smooth Perlin noise within the noise range", () => {
-  const { renderer } = setup();
+  // A realistic width, so there are many steps between nodes whatever the node count
+  const renderer = new HatchedRenderer(mockCanvas(), 600, 50, 1, 1.5);
+  renderer.generateLines();
   renderer.initialiseNoise();
 
   const limit = HatchedRenderer.LINE_WIDTH_NOISE_RANGE / 2;

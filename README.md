@@ -37,7 +37,7 @@ Changing an attribute rebuilds the cloud. Attribute names are case-insensitive i
 <cumulus-canvas width="600" height="400" growIn regenerateOnClick></cumulus-canvas>
 ```
 
-Moving the mouse over the cloud nudges cells sideways out of its way.
+**Mouse:** the mouse acts like a hand moving through water or gas. Moving it across the cloud pushes cells along the stroke: faster strokes push harder, bigger cells are heavier and move less, overlapping cells drag each other along, and a spring slowly returns every cell to where it started. A resting mouse does nothing, and there is no mouse effect with `prefers-reduced-motion`. Tune it in `interaction` in `src/lib/theme.js`. (The old sideways push, `moveCellsWithMouse`, is kept in `src/lib/cloud-simulation.js` but not used.)
 
 **Resizing:** leave `width`/`height` off and size the element with CSS (e.g. `cumulus-canvas { width: 100%; height: 400px }`) to make the cloud fill its container. It is rebuilt when the element's size changes, drawn at the device pixel ratio current at that time (a zoom or monitor change on its own does not trigger a rebuild yet).
 
@@ -67,13 +67,21 @@ Tests use Node's built-in runner and run without a browser. The custom element i
 
 ## Roadmap
 
+### Next up (noted, not started)
+
+- [ ] **Line break sections that eat into adjacent lines.** Horizontal line breaks (gaps in a line) should be able to spread into the lines above and below, mainly along the bottom of the cloud and the top and bottom border of the canvas. (Related source TODO: higher probability and longer line breaks on the first and last line.)
+- [ ] **Sunset timelapse.** See "Sunset mode" below; the theme object and `applyTheme` are ready for it.
+- [ ] **Enforce a minimum base width for the cloud.** (Related source TODO: minimum base width for the matched bottom cell.)
+
 ### Requested features
 
 - [x] **Rebuild on attribute change** – `observedAttributes` / `attributeChangedCallback`, `ResizeObserver`, `disconnectedCallback` cleanup, all through one `rebuild()`.
-- [x] **Grow-in animation** – `growIn` attribute. The cloud is scaled up from the middle of its base with an ease-out curve, and the fractals (fluff) appear later than the cell bodies.
+- [x] **Grow-in animation** – `growIn` attribute. The cloud is scaled up from the middle of its base with an ease-out curve. The fractals (fluff) grow with the cells by default; set `animation.fractalLag` in the theme to make them appear later.
 - [ ] **Sunset mode** – slowly shift the palette (sky, cloud lit/shadow colours) and rotate the shadow diagonal angle/origin to mimic a sunset timelapse. (The theme object and `applyTheme` are in place for this.)
 - [x] **Click to regenerate** – `regenerateOnClick` attribute. The cloud shrinks away, then a new one (new random seed) grows.
 - [ ] **Morph on click** – try morphing the old cloud into the new one on click, without shrinking away first.
+- [x] **Force-based mouse interaction** – see above. Vertical movement is limited (`verticalStrength` 0.2) because the fills tear sooner with it.
+- [ ] **More vertical mouse movement** – needs the fills to survive it, most likely by building the fill per scanline from the cells each frame (see CLAUDE.md for the measurements). Also: touch support through pointer events.
 - [ ] **More realistic growth** – growth is currently a uniform scale about the base; cells could grow at different times, rise and billow individually.
 - [ ] **More realistic clouds** – shade by light direction, and make growth, rising, drift and dissipation behave more like real cumulus. (Fills are rendered again.)
 - [ ] **Lighter on the CPU** – see below.
