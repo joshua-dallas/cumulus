@@ -102,7 +102,9 @@ Tests use Node's built-in runner and run without a browser. The custom element i
 - [ ] Batch strokes: one `stroke()` per run of the same colour/width instead of one per 2px step, and cache the `hsl()` strings. (Tried batching by colour, lightness and width: about 3x faster to draw in headless Chrome but slower in a real browser, so it was reverted. Needs measuring in a real browser before retrying.)
 - [ ] Redraw only the lines affected by moved cells instead of the whole canvas.
 - [ ] Stop the `requestAnimationFrame` loop entirely while the cloud is at rest.
-- [ ] Offscreen canvas / worker.
+- [x] Offscreen canvas / worker: the cloud is built, simulated and drawn in a worker (`src/lib/cumulus-worker.js`, hosted by `src/lib/cumulus-host.js`), with a main-thread fallback where a worker cannot draw to a canvas.
+- [ ] Smaller padding and noise for small screens (phones), as a separate theme.
+- [ ] Worker file loading: the build emits the worker as a separate hashed file (`dist/assets/cumulus-worker-<hash>.js`), so the element only works from a bundler that handles `new Worker(new URL(...))`, or when all of `dist/` is served as is. Use a bundler on the site, or inline the worker (`?worker&inline`) so `dist/` is self-contained.
 
 ### Housekeeping
 

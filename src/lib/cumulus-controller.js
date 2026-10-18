@@ -20,7 +20,7 @@ const MAX_FRAME_MS = 100;
 //
 // config: { width, height, numCells, seed, lineWidth, lineSpacing,
 //           animate, growIn, regenerateOnClick, sunset, sunsetDuration, shadowDiagonal,
-//           theme, onSeedChange, randomSeed, now }
+//           theme, onSeedChange, randomSeed, now, pixelRatio, listenToCanvas, onCursorChange }
 //   animate: false draws the finished cloud once, with no animation loop,
 //            no mouse push and no grow or shrink animation (used for
 //            prefers-reduced-motion)
@@ -35,6 +35,12 @@ const MAX_FRAME_MS = 100;
 //            (see setShadowDiagonal). Angles are in radians
 //   onSeedChange(seed): called when a click gives the cloud a new seed
 //   randomSeed(): picks the seed for a new cloud. now(): the clock, in ms
+//   pixelRatio: device pixels per CSS pixel (read from the window if not given)
+//   listenToCanvas: false when the controller runs in a worker, where the canvas gets no
+//            mouse events. Whoever owns the real canvas calls pointerMove, pointerLeave
+//            and pointerClick (positions in canvas pixels) instead
+//   onCursorChange(cursor): called with "pointer" or "" when the mouse enters or leaves
+//            the cloud. By default it sets canvas.style.cursor (a worker has no style)
 //
 // The cloud is grown and shrunk by scaling it about the middle of its base
 // (see scaleX/scaleY), not by changing the cloud itself, so the cloud built
@@ -74,6 +80,7 @@ export class CumulusController {
       config.height,
       config.lineWidth,
       config.lineSpacing,
+      config.pixelRatio,
     );
     this.renderer.applyTheme(this.theme);
     this.renderer.finaliseRenderer();
@@ -97,29 +104,24 @@ export class CumulusController {
 
     // Cursor position relative to the canvas, or null when it is not over it
     this.cursor = null;
+    this.setCursorStyle = config.onCursorChange ?? ((cursor) => (this.canvas.style.cursor = cursor));
     this.onMouseMove = (event) => {
-      this.cursor = this.canvasPoint(event);
-      if (this.regenerateOnClick) {
-        const over = this.isOverCloud(this.cursor.x, this.cursor.y);
-        this.canvas.style.cursor = over ? "pointer" : "";
-      }
+      const point = this.canvasPoint(event);
+      this.pointerMove(point.x, point.y);
     };
-    this.onMouseLeave = () => {
-      this.cursor = null;
-      this.canvas.style.cursor = "";
-    };
+    this.onMouseLeave = () => this.pointerLeave();
     this.onClick = (event) => {
       const point = this.canvasPoint(event);
-      if (this.isOverCloud(point.x, point.y)) this.regenerate();
+      this.pointerClick(point.x, point.y);
     };
     // The mouse is only followed if it can do something: push the cloud, or click it
-    const followMouse =
+    this.followsMouse =
       this.regenerateOnClick || (this.animate && this.theme.interaction.enabled);
-    if (followMouse) {
+    if (this.followsMouse && (config.listenToCanvas ?? true)) {
       this.canvas.addEventListener("mousemove", this.onMouseMove);
       this.canvas.addEventListener("mouseleave", this.onMouseLeave);
     }
-    if (this.regenerateOnClick) {
+    if (this.regenerateOnClick && (config.listenToCanvas ?? true)) {
       this.canvas.addEventListener("click", this.onClick);
     }
 
@@ -140,6 +142,23 @@ export class CumulusController {
       x: this.builder.dome.x,
       y: Math.max(...this.builder.cells.map((cell) => cell.y + cell.radius)),
     };
+  }
+
+  // The mouse moved to a point (in canvas pixels), left the canvas, or clicked
+  pointerMove(x, y) {
+    this.cursor = { x, y };
+    if (this.regenerateOnClick) {
+      this.setCursorStyle(this.isOverCloud(x, y) ? "pointer" : "");
+    }
+  }
+
+  pointerLeave() {
+    this.cursor = null;
+    this.setCursorStyle("");
+  }
+
+  pointerClick(x, y) {
+    if (this.isOverCloud(x, y)) this.regenerate();
   }
 
   canvasPoint(event) {
@@ -184,7 +203,7 @@ export class CumulusController {
     this.canvas.removeEventListener("mousemove", this.onMouseMove);
     this.canvas.removeEventListener("mouseleave", this.onMouseLeave);
     this.canvas.removeEventListener("click", this.onClick);
-    this.canvas.style.cursor = "";
+    this.setCursorStyle("");
   }
 
   //----------------------------------------------------//

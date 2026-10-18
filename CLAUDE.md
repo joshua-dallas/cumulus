@@ -21,7 +21,9 @@ Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`
 | --- | --- |
 | `src/index.js` | Exports the `Cumulus` class (no side effects). |
 | `src/define.js` | Registers `cumulus-canvas` (side-effect entry, listed in `package.json` `sideEffects`). |
-| `src/cumulus.js` | `Cumulus` custom element: DOM only. Shadow root + canvas, attribute parsing, `observedAttributes`, `ResizeObserver`, `IntersectionObserver`, `visibilitychange`, reduced-motion media query. Everything funnels into `rebuild()`. |
+| `src/cumulus.js` | `Cumulus` custom element: DOM only. Shadow root + canvas, attribute parsing, `observedAttributes`, `ResizeObserver`, `IntersectionObserver`, `visibilitychange`, reduced-motion media query. Everything funnels into `rebuild()`, which tells its host to build. |
+| `src/lib/cumulus-host.js` | `WorkerHost` (transfers the canvas to a worker as an `OffscreenCanvas`, forwards mouse positions, sets cursor and fires seed changes from the worker's replies) and `MainThreadHost` (fallback, runs a `CumulusController` directly). Same methods: `build(config)`, `setInView`, `setPageVisible`, `setSunset`, `setShadowDiagonal`, `seed`, `destroy`. |
+| `src/lib/cumulus-worker.js` | Worker entry: owns the `OffscreenCanvas` and one `CumulusController`; receives messages from `WorkerHost`. |
 | `src/lib/cumulus-controller.js` | `CumulusController`: runs one cloud on one canvas. Builds builder + simulation + renderer, converts builder shapes into renderer layers (`drawFrame`), owns the rAF loop, mouse tracking, and the grow/shrink/click-to-regenerate animation. Created per rebuild, discarded with `destroy()`. |
 | `src/lib/easing.js` | `easeOutCubic`, `easeInOutCubic`, `clamp01`. |
 | `src/lib/cloud-builder.js` | `CloudBuilder`: seeded, pure-geometry cloud model. No canvas access. |
@@ -45,6 +47,10 @@ attributes / resize / reduced-motion change
                     if simulation.step(cursor) moved something:
                        builder.updateFills(); clearCanvas(); renderer.clear(); drawFrame()
 ```
+
+### Worker
+
+The element creates a `WorkerHost` when `Worker`, `OffscreenCanvas` and `transferControlToOffscreen` exist, else a `MainThreadHost`. A canvas can be transferred only once, so the worker host owns its canvas for good: a rebuild sends `build` (the worker destroys the old controller and makes a new one on the same `OffscreenCanvas`), and `disconnectedCallback` terminates the worker and discards the canvas (a new one is made on reconnect). Config must be structured-cloneable, so `onSeedChange` stays on the main thread (the worker sends `seedchange`). In a worker the controller runs with `listenToCanvas: false` and `onCursorChange`, and the host calls `pointerMove/pointerLeave/pointerClick` from forwarded events (positions in canvas px); the renderer takes `pixelRatio` from config and skips `canvas.style` (the host sets the style size). Vite bundles the worker through the `new Worker(new URL(...))` in `cumulus-host.js`. Not covered by tests (needs a browser); checked by hand in headless Chrome over the DevTools protocol.
 
 ### CloudBuilder (generation, run once in the constructor, in this order)
 
@@ -167,7 +173,7 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 | `fill-tears.test.js`, `fill-pockets.js` | tear guard: random strokes over real clouds must not open pockets of sky or expose fill edges, and cohesion must tear less than none; the helper measures pockets and exposed edges on a simple raster, with its own tests |
 | `hatched-renderer.test.js` | `addSegment` overwrite/split, padding as gap segments (full width, persists when covered, shadow), edge-noise cache (including scaling with range), Perlin line width noise, `clear()` |
 | `easing.test.js` | endpoints and monotonic progress of the easing functions |
-| `cumulus-controller.test.js` | layer building and keys, animate on/off, pause/resume/destroy, only redraw when something moved, theme, sunset (stages half way, reverse, reversing part way, redrawn each frame, instant without animation, same theme object), grow-in (scale, eased progress, fractals growing with the cells (and `fractalLag`), no jump after pause, finished cloud identical to a static one), click to regenerate (shrink, new seed, ignored clicks, instant without animation, pointer cursor) |
+| `cumulus-controller.test.js` | pointer methods without canvas listeners, layer building and keys, animate on/off, pause/resume/destroy, only redraw when something moved, theme, sunset (stages half way, reverse, reversing part way, redrawn each frame, instant without animation, same theme object), grow-in (scale, eased progress, fractals growing with the cells (and `fractalLag`), no jump after pause, finished cloud identical to a static one), click to regenerate (shrink, new seed, ignored clicks, instant without animation, pointer cursor) |
 
 The `Cumulus` element (`src/cumulus.js`) needs a DOM and is not covered: attribute rebuilds, the `growIn`/`regenerateOnClick` attributes, `ResizeObserver`, `IntersectionObserver` and reduced motion were checked by hand in headless Chrome over the DevTools protocol (`--force-prefers-reduced-motion` for the reduced-motion path; `--virtual-time-budget` does not run animation frames reliably, so use real time).
 

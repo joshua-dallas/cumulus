@@ -1,4 +1,4 @@
-import { CumulusController } from "./lib/cumulus-controller.js";
+import { MainThreadHost, WorkerHost, workersCanDraw } from "./lib/cumulus-host.js";
 
 const DEFAULTS = {
   width: 500,
@@ -14,7 +14,9 @@ const RESIZE_DEBOUNCE_MS = 150;
 
 // The <cumulus-canvas> element: owns the DOM (shadow root and canvas), reads
 // attributes, and decides when the cloud must be rebuilt. Everything to do with
-// the cloud itself lives in CumulusController.
+// the cloud itself lives in CumulusController, which runs in a worker (so it never blocks
+// the page) where the browser lets a worker draw to a canvas, and on the main thread
+// where it does not. See cumulus-host.js.
 //
 // Optional behaviours, off unless the attribute is present (`growIn`,
 // `regenerateOnClick`; write ="false" to turn one off explicitly):
@@ -36,7 +38,7 @@ const RESIZE_DEBOUNCE_MS = 150;
 // container), falling back to the default if the element has none.
 //
 // Anything that changes the cloud (attribute, resize, reduced-motion
-// preference) ends in rebuild(), which replaces the controller.
+// preference) ends in rebuild(), which replaces the cloud.
 export class Cumulus extends HTMLElement {
   // Attribute names are lower case because HTML lower-cases attribute names
   static observedAttributes = [
@@ -54,8 +56,8 @@ export class Cumulus extends HTMLElement {
 
   constructor() {
     super();
-    this.controller = null;
-    this.size = null; // The size the current controller was built with
+    this.host = null; // Where the cloud runs: in a worker, or on the main thread
+    this.size = null; // The size the current cloud was built with
     this.hasBuilt = false; // Grow-in only plays the first time
     this.seedOverride = null; // The seed of a cloud made by clicking, kept across rebuilds
     this.shadowSettings = { day: {}, sunset: {} }; // Set with setShadowDiagonal, kept across rebuilds
@@ -66,11 +68,11 @@ export class Cumulus extends HTMLElement {
     );
 
     this.onReducedMotionChange = () => this.scheduleRebuild();
-    this.onVisibilityChange = () => this.controller?.setPageVisible(!document.hidden);
+    this.onVisibilityChange = () => this.host?.setPageVisible(!document.hidden);
   }
 
   connectedCallback() {
-    // The shadow root and canvas survive disconnection, so create them only once
+    // The shadow root survives disconnection, so create it only once
     if (!this.shadowRoot) {
       const shadow = this.attachShadow({ mode: "open" });
       const style = document.createElement("style");
@@ -78,14 +80,18 @@ export class Cumulus extends HTMLElement {
         :host { display: inline-block; line-height: 0; }
         canvas { display: block; }
       `;
+      shadow.append(style);
+    }
+    // A canvas given to a worker cannot be used again, so it is replaced on reconnect
+    if (!this.canvas) {
       this.canvas = document.createElement("canvas");
-      shadow.append(style, this.canvas);
+      this.shadowRoot.append(this.canvas);
     }
 
     // Pause the animation when scrolled out of view
     this.intersectionObserver = new IntersectionObserver((entries) => {
       this.inView = entries[entries.length - 1].isIntersecting;
-      this.controller?.setInView(this.inView);
+      this.host?.setInView(this.inView);
     });
     this.intersectionObserver.observe(this);
 
@@ -114,19 +120,23 @@ export class Cumulus extends HTMLElement {
       "change",
       this.onReducedMotionChange,
     );
-    this.controller?.destroy();
-    this.controller = null;
+    this.host?.destroy();
+    if (this.host instanceof WorkerHost) {
+      this.canvas.remove();
+      this.canvas = null;
+    }
+    this.host = null;
     this.size = null;
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
     // Attributes present in the markup are reported before the element is
     // connected. connectedCallback builds from them, so there is nothing to do
-    if (oldValue === newValue || !this.controller) return;
+    if (oldValue === newValue || !this.host) return;
 
     // The sunset fades in or out, with no need to rebuild the cloud
     if (name === "sunset") {
-      this.controller.setSunset(this.booleanAttribute("sunset"), this.sunsetDuration());
+      this.host.setSunset(this.booleanAttribute("sunset"), this.sunsetDuration());
       return;
     }
     if (name === "sunsetduration") return; // used the next time the sunset changes
@@ -146,14 +156,16 @@ export class Cumulus extends HTMLElement {
   }
 
   rebuild() {
-    this.controller?.destroy();
+    this.host ??= workersCanDraw(this.canvas)
+      ? new WorkerHost(this.canvas)
+      : new MainThreadHost(this.canvas);
 
     const config = this.readConfig();
     this.size = { width: config.width, height: config.height };
-    this.controller = new CumulusController(this.canvas, config);
+    this.host.build(config);
     this.hasBuilt = true;
-    this.controller.setInView(this.inView);
-    this.controller.setPageVisible(!document.hidden);
+    this.host.setInView(this.inView);
+    this.host.setPageVisible(!document.hidden);
   }
 
   readConfig() {
@@ -190,12 +202,12 @@ export class Cumulus extends HTMLElement {
   setShadowDiagonal({ day = {}, sunset = {} }) {
     Object.assign(this.shadowSettings.day, day);
     Object.assign(this.shadowSettings.sunset, sunset);
-    this.controller?.setShadowDiagonal({ day, sunset });
+    this.host?.setShadowDiagonal({ day, sunset });
   }
 
   // The seed of the cloud on show
   get currentSeed() {
-    return this.controller?.seed;
+    return this.host?.seed;
   }
 
   sunsetDuration() {

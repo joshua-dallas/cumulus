@@ -38,8 +38,10 @@ export class HatchedRenderer {
   // width and height are the logical (CSS pixel) size of the drawing area.
   // They are passed in, rather than measured from the canvas, so the renderer
   // does not depend on the canvas being laid out in the DOM.
-  constructor(canvas, width, height, lineWidth = 2, lineSpacing = 2) {
+  // pixelRatio is the device pixels per CSS pixel. A worker has no window to read it from
+  constructor(canvas, width, height, lineWidth = 2, lineSpacing = 2, pixelRatio = undefined) {
     this.canvas = canvas;
+    this.pixelRatio = pixelRatio ?? globalThis.window?.devicePixelRatio ?? 1;
     this.width = width;
     this.height = height;
     this.numXSteps = Math.ceil(width / HatchedRenderer.DRAW_STEP);
@@ -106,7 +108,7 @@ export class HatchedRenderer {
   }
 
   resize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = this.pixelRatio;
 
     // Scale for pixel perfect rendering. Assigning canvas.width also resets
     // the context state, so the scale is applied from a clean transform
@@ -114,9 +116,12 @@ export class HatchedRenderer {
     this.canvas.height = this.height * dpr;
     this.context.scale(dpr, dpr);
 
-    // Set the 'drawn' size of the canvas
-    this.canvas.style.width = `${this.width}px`;
-    this.canvas.style.height = `${this.height}px`;
+    // Set the 'drawn' size of the canvas. An OffscreenCanvas (in a worker) has no
+    // style: the element that owns the real canvas sets it
+    if (this.canvas.style) {
+      this.canvas.style.width = `${this.width}px`;
+      this.canvas.style.height = `${this.height}px`;
+    }
   }
 
   // Applies the renderer-related parts of a theme (see theme.js).

@@ -624,3 +624,26 @@ test("the fill of the cloud counts as the cloud for clicks", () => {
   );
   assert.equal(typeof inside, "boolean");
 });
+
+test("pointer methods drive the cloud without listening to the canvas (as in a worker)", () => {
+  const cursors = [];
+  const { canvas, controller } = create({
+    regenerateOnClick: true,
+    listenToCanvas: false,
+    onCursorChange: (cursor) => cursors.push(cursor),
+  });
+  assert.deepEqual(canvas.listeners, []);
+  assert.equal(controller.followsMouse, true);
+
+  const cell = controller.builder.cells[0];
+  controller.pointerMove(cell.x, cell.y);
+  controller.pointerMove(1, 1);
+  controller.pointerLeave();
+  assert.deepEqual(cursors, ["pointer", "", ""]);
+
+  const seed = controller.seed;
+  controller.config.randomSeed = undefined;
+  controller.randomSeed = () => seed + 1;
+  controller.pointerClick(cell.x, cell.y);
+  assert.equal(controller.phase, "shrinking");
+});
