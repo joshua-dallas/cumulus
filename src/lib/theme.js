@@ -18,10 +18,10 @@ import { lerp, mixColours } from "./utils.js";
 
 export const defaultTheme = {
   colours: {
-    light: { hue: 0, sat: 0, light: 78 },
+    light: { hue: 0, sat: 0, light: 75 },
     mid: { hue: 0, sat: 0, light: 66 },
-    dark: { hue: 0, sat: 0, light: 46 },
-    dark2: { hue: 0, sat: 0, light: 15 },
+    dark: { hue: 0, sat: 0, light: 45 },
+    dark2: { hue: 0, sat: 0, light: 10 },
   },
 
   background: {
@@ -73,6 +73,10 @@ export const defaultTheme = {
   interaction: {
     // Whether the mouse moves the cloud at all. Off for now: only clicking does anything
     enabled: false,
+    // The older, simpler mouse push (CloudSimulation.moveCellsWithMouse): cells near the
+    // cursor slide sideways, just far enough to be out of its way, and return when it
+    // leaves. It does not use the force settings below. Set by the mouseRepel attribute
+    repel: false,
 
     // The hand
     handRadius: 30, // Added to a cell's radius: how close the stroke must pass to push it
@@ -131,7 +135,7 @@ export const defaultTheme = {
       leftEdgeNoise: 4,
       rightPadding: 0,
       leftPadding: 0,
-      lineWidth: 0.9,
+      lineWidth: 1,
       waveAmplitude: 0.8,
       wavePeriod: 30,
     },

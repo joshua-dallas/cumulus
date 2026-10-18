@@ -21,7 +21,7 @@ const MAX_FRAME_MS = 100;
 //
 // config: { width, height, numCells, seed, lineWidth, lineSpacing,
 //           animate, growIn, regenerateOnClick, sunset, sunsetDuration, shadowDiagonal,
-//           themeValues,
+//           themeValues, mouseRepel,
 //           theme, onSeedChange, randomSeed, now, pixelRatio, listenToCanvas, onCursorChange }
 //   animate: false draws the finished cloud once, with no animation loop,
 //            no mouse push and no grow or shrink animation (used for
@@ -35,6 +35,7 @@ const MAX_FRAME_MS = 100;
 //   shadowDiagonal: { day: { angle, xOriginOffset }, sunset: { angle, xOriginOffset } }
 //            changes where the edge of the shadow is, in the day and in the sunset
 //            (see setShadowDiagonal). Angles are in radians
+//   mouseRepel: cells slide out of the way of the mouse (theme.interaction.repel)
 //   themeValues: colours and layer styles to change from the theme's (see setThemeValues)
 //   onSeedChange(seed): called when a click gives the cloud a new seed
 //   randomSeed(): picks the seed for a new cloud. now(): the clock, in ms
@@ -60,6 +61,7 @@ export class CumulusController {
     this.growIn = this.animate && (config.growIn ?? false);
     this.regenerateOnClick = config.regenerateOnClick ?? false;
     this.theme = mergeThemeValues(config.theme ?? createTheme(), config.themeValues);
+    if (config.mouseRepel !== undefined) this.theme.interaction.repel = config.mouseRepel;
 
     // The sunset is a path through themes: the day, a dusk with a blue sky orange at
     // the bottom, and the sunset. The first is a copy of the day theme, as this.theme
@@ -120,7 +122,8 @@ export class CumulusController {
     };
     // The mouse is only followed if it can do something: push the cloud, or click it
     this.followsMouse =
-      this.regenerateOnClick || (this.animate && this.theme.interaction.enabled);
+      this.regenerateOnClick ||
+      (this.animate && (this.theme.interaction.enabled || this.theme.interaction.repel));
     if (this.followsMouse && (config.listenToCanvas ?? true)) {
       this.canvas.addEventListener("mousemove", this.onMouseMove);
       this.canvas.addEventListener("mouseleave", this.onMouseLeave);

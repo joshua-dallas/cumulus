@@ -44,9 +44,8 @@ export class CloudSimulation {
     let changed = false;
     // The mouse only moves the cloud if it is switched on (theme.interaction.enabled)
     if (this.interaction.enabled) changed = this.forceStep(cursor, dt) || changed;
-    // The old sideways mouse push is not used now that the mouse is a force.
-    // moveCellsWithMouse itself is unchanged
-    //changed = this.moveCellsWithMouse(cursor) || changed;
+    // The older sideways push of cells out of the cursor's way, if switched on (theme.interaction.repel)
+    if (this.interaction.repel) changed = this.moveCellsWithMouse(cursor) || changed;
     //changed = this.fractalSim() || changed;
     //changed = this.moveCloudCells() || changed;
     //changed = this.growCloudCells() || changed;

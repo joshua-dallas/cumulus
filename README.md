@@ -29,11 +29,12 @@ Changing an attribute rebuilds the cloud. Attribute names are case-insensitive i
 | `lineWidth`   | 1       | Hatch line thickness                             |
 | `lineSpacing` | 1.5     | Gap between hatch lines                          |
 | `growIn`      | off     | The cloud grows from nothing when the element is first created |
+| `mouseRepel` | off | Cells slide sideways out of the way of the mouse, and return when it leaves |
 | `regenerateOnClick` | off | Clicking the cloud shrinks it away and grows a new one (new random seed) |
 | `sunset`      | off     | The sky is a sunset. Adding or removing the attribute fades the sky from blue to orange and raises the shadow, or fades back |
 | `sunsetDuration` | 6000 | How long the sunset fade takes, in ms |
 
-`growIn`, `regenerateOnClick` and `sunset` are on when the attribute is present and off when it is missing or set to `false`. A resize rebuild does not replay the grow-in, and a cloud made by clicking keeps its seed through a rebuild until the `seed` attribute is changed. With `prefers-reduced-motion`, `growIn` does nothing and a click replaces the cloud instantly.
+`growIn`, `regenerateOnClick`, `mouseRepel` and `sunset` are on when the attribute is present and off when it is missing or set to `false`. A resize rebuild does not replay the grow-in, and a cloud made by clicking keeps its seed through a rebuild until the `seed` attribute is changed. With `prefers-reduced-motion`, `growIn` does nothing and a click replaces the cloud instantly.
 
 ```html
 <cumulus-canvas width="600" height="400" growIn regenerateOnClick></cumulus-canvas>
@@ -41,7 +42,7 @@ Changing an attribute rebuilds the cloud. Attribute names are case-insensitive i
 
 The seed of the cloud on show is `element.currentSeed`. A click gives the cloud a new seed, and the element fires a `seedchange` event with `{ seed }` in its `detail` (the demo uses both to show the seed). The demo page also has a sunset button, which toggles the `sunset` attribute, and four sliders for the angle and offset of the shadow edge in the day and in the sunset (they call `element.setShadowDiagonal({ day: { angle, xOriginOffset }, sunset: { ... } })`, with angles in radians). The spaces between the lines are see-through, so whatever is behind the canvas on the page shows through them. The gaps within a line (the padding beside the cloud's cells and fractals) are drawn in the paper colour, `background.paper` in the theme (white by default). Unset it to make those gaps see-through too.
 
-**Mouse:** for now the only thing the mouse does is click (with `regenerateOnClick`). The mouse force is built but switched off (`interaction.enabled` in `src/lib/theme.js`): when on, the mouse acts like a hand moving through water or gas, pushing cells along the stroke (faster strokes push harder, bigger cells are heavier, overlapping cells drag each other along, and a spring slowly returns every cell to where it started). The old sideways push, `moveCellsWithMouse`, is also kept but not used.
+**Mouse:** the mouse can click (`regenerateOnClick`) and push cells out of its way (`mouseRepel`, the older sideways push, `moveCellsWithMouse`). The mouse force is built but switched off (`interaction.enabled` in `src/lib/theme.js`): when on, the mouse acts like a hand moving through water or gas, pushing cells along the stroke (faster strokes push harder, bigger cells are heavier, overlapping cells drag each other along, and a spring slowly returns every cell to where it started).
 
 **Resizing:** leave `width`/`height` off and size the element with CSS (e.g. `cumulus-canvas { width: 100%; height: 400px }`) to make the cloud fill its container. It is rebuilt when the element's size changes, drawn at the device pixel ratio current at that time (a zoom or monitor change on its own does not trigger a rebuild yet).
 

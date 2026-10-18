@@ -20,10 +20,11 @@ const RESIZE_DEBOUNCE_MS = 150;
 // where it does not. See cumulus-host.js.
 //
 // Optional behaviours, off unless the attribute is present (`growIn`,
-// `regenerateOnClick`; write ="false" to turn one off explicitly):
+// `regenerateOnClick`, `mouseRepel`; write ="false" to turn one off explicitly):
 //   growIn             the cloud grows from nothing when the element is first
 //                      created (not when it is rebuilt for a resize)
 //   regenerateOnClick  clicking the cloud shrinks it away and grows a new one
+//   mouseRepel         cells slide out of the way of the mouse
 //   sunset             the sky is a sunset. Adding or removing the attribute fades
 //                      to or from one, over sunsetDuration ms (default 6000)
 //
@@ -54,6 +55,7 @@ export class Cumulus extends HTMLElement {
     "linespacing",
     "growin",
     "regenerateonclick",
+    "mouserepel",
     "sunset",
     "sunsetduration",
   ];
@@ -192,6 +194,7 @@ export class Cumulus extends HTMLElement {
       animate: !this.reducedMotionQuery.matches,
       growIn: !this.hasBuilt && this.booleanAttribute("growin"),
       regenerateOnClick: this.booleanAttribute("regenerateonclick"),
+      mouseRepel: this.booleanAttribute("mouserepel"),
       sunset: this.booleanAttribute("sunset"),
       sunsetDuration: this.sunsetDuration(),
       shadowDiagonal: structuredClone(this.shadowSettings),

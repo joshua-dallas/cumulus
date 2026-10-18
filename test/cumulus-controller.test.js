@@ -668,3 +668,17 @@ test("themeValues in the config are applied from the start", () => {
   assert.equal(controller.theme.colours.mid.light, 61);
   assert.equal(defaultTheme.colours.mid.light, 66); // the default theme itself is not changed
 });
+
+test("mouseRepel makes the cloud follow the mouse and slide cells out of its way", () => {
+  const off = create({ animate: true });
+  assert.equal(off.canvas.listeners.length, 0); // nothing to do with the mouse
+
+  const { canvas, controller } = create({ mouseRepel: true });
+  assert.ok(canvas.listeners.some((l) => l.type === "mousemove"));
+  runFor(200);
+  const cell = controller.builder.cells[0];
+  const start = cell.x;
+  controller.pointerMove(cell.x + 5, cell.y);
+  runFor(200);
+  assert.notEqual(cell.x, start);
+});
