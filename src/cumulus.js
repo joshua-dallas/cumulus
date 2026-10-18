@@ -7,6 +7,7 @@ const DEFAULTS = {
   seed: 5, // TODO: randomize seed if not provided. 323 is good
   lineWidth: 1,
   lineSpacing: 1.5,
+  sunsetDuration: 6000, // ms
 };
 
 const RESIZE_DEBOUNCE_MS = 150;
@@ -20,6 +21,15 @@ const RESIZE_DEBOUNCE_MS = 150;
 //   growIn             the cloud grows from nothing when the element is first
 //                      created (not when it is rebuilt for a resize)
 //   regenerateOnClick  clicking the cloud shrinks it away and grows a new one
+//   sunset             the sky is a sunset. Adding or removing the attribute fades
+//                      to or from one, over sunsetDuration ms (default 6000)
+//
+// setShadowDiagonal({ day: { angle, xOriginRatio }, sunset: { ... } }) moves the edge
+// of the shadow, in radians, for the day and for the sunset.
+//
+// The seed of the cloud on show is the property `currentSeed`. When a click gives
+// the cloud a new seed, the element fires a `seedchange` event with { seed } in
+// its detail.
 //
 // Sizing: width/height attributes set a fixed size. A dimension without an
 // attribute takes the element's own CSS size (so the cloud can fill its
@@ -38,6 +48,8 @@ export class Cumulus extends HTMLElement {
     "linespacing",
     "growin",
     "regenerateonclick",
+    "sunset",
+    "sunsetduration",
   ];
 
   constructor() {
@@ -46,6 +58,7 @@ export class Cumulus extends HTMLElement {
     this.size = null; // The size the current controller was built with
     this.hasBuilt = false; // Grow-in only plays the first time
     this.seedOverride = null; // The seed of a cloud made by clicking, kept across rebuilds
+    this.shadowSettings = { day: {}, sunset: {} }; // Set with setShadowDiagonal, kept across rebuilds
     this.rebuildTimer = null;
     this.inView = true;
     this.reducedMotionQuery = window.matchMedia(
@@ -110,6 +123,14 @@ export class Cumulus extends HTMLElement {
     // Attributes present in the markup are reported before the element is
     // connected. connectedCallback builds from them, so there is nothing to do
     if (oldValue === newValue || !this.controller) return;
+
+    // The sunset fades in or out, with no need to rebuild the cloud
+    if (name === "sunset") {
+      this.controller.setSunset(this.booleanAttribute("sunset"), this.sunsetDuration());
+      return;
+    }
+    if (name === "sunsetduration") return; // used the next time the sunset changes
+
     if (name === "seed") this.seedOverride = null; // the new attribute wins
     this.scheduleRebuild();
   }
@@ -154,8 +175,31 @@ export class Cumulus extends HTMLElement {
       animate: !this.reducedMotionQuery.matches,
       growIn: !this.hasBuilt && this.booleanAttribute("growin"),
       regenerateOnClick: this.booleanAttribute("regenerateonclick"),
-      onSeedChange: (seed) => (this.seedOverride = seed),
+      sunset: this.booleanAttribute("sunset"),
+      sunsetDuration: this.sunsetDuration(),
+      shadowDiagonal: structuredClone(this.shadowSettings),
+      onSeedChange: (seed) => {
+        this.seedOverride = seed;
+        this.dispatchEvent(
+          new CustomEvent("seedchange", { detail: { seed }, bubbles: true, composed: true }),
+        );
+      },
     };
+  }
+
+  setShadowDiagonal({ day = {}, sunset = {} }) {
+    Object.assign(this.shadowSettings.day, day);
+    Object.assign(this.shadowSettings.sunset, sunset);
+    this.controller?.setShadowDiagonal({ day, sunset });
+  }
+
+  // The seed of the cloud on show
+  get currentSeed() {
+    return this.controller?.seed;
+  }
+
+  sunsetDuration() {
+    return this.positiveAttribute("sunsetduration", DEFAULTS.sunsetDuration);
   }
 
   // The size the cloud should have: attributes first, then the element's CSS size

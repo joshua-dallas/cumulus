@@ -30,14 +30,18 @@ Changing an attribute rebuilds the cloud. Attribute names are case-insensitive i
 | `lineSpacing` | 1.5     | Gap between hatch lines                          |
 | `growIn`      | off     | The cloud grows from nothing when the element is first created |
 | `regenerateOnClick` | off | Clicking the cloud shrinks it away and grows a new one (new random seed) |
+| `sunset`      | off     | The sky is a sunset. Adding or removing the attribute fades the sky from blue to orange and raises the shadow, or fades back |
+| `sunsetDuration` | 6000 | How long the sunset fade takes, in ms |
 
-`growIn` and `regenerateOnClick` are on when the attribute is present and off when it is missing or set to `false`. A resize rebuild does not replay the grow-in, and a cloud made by clicking keeps its seed through a rebuild until the `seed` attribute is changed. With `prefers-reduced-motion`, `growIn` does nothing and a click replaces the cloud instantly.
+`growIn`, `regenerateOnClick` and `sunset` are on when the attribute is present and off when it is missing or set to `false`. A resize rebuild does not replay the grow-in, and a cloud made by clicking keeps its seed through a rebuild until the `seed` attribute is changed. With `prefers-reduced-motion`, `growIn` does nothing and a click replaces the cloud instantly.
 
 ```html
 <cumulus-canvas width="600" height="400" growIn regenerateOnClick></cumulus-canvas>
 ```
 
-**Mouse:** the mouse acts like a hand moving through water or gas. Moving it across the cloud pushes cells along the stroke: faster strokes push harder, bigger cells are heavier and move less, overlapping cells drag each other along, and a spring slowly returns every cell to where it started. A resting mouse does nothing, and there is no mouse effect with `prefers-reduced-motion`. Tune it in `interaction` in `src/lib/theme.js`. (The old sideways push, `moveCellsWithMouse`, is kept in `src/lib/cloud-simulation.js` but not used.)
+The seed of the cloud on show is `element.currentSeed`. A click gives the cloud a new seed, and the element fires a `seedchange` event with `{ seed }` in its `detail` (the demo uses both to show the seed). The demo page also has a sunset button, which toggles the `sunset` attribute, and four sliders for the angle and offset of the shadow edge in the day and in the sunset (they call `element.setShadowDiagonal({ day: { angle, xOriginRatio }, sunset: { ... } })`, with angles in radians). The spaces between the lines are see-through, so whatever is behind the canvas on the page shows through them. The gaps within a line (the padding beside the cloud's cells and fractals) are drawn in the paper colour, `background.paper` in the theme (white by default). Unset it to make those gaps see-through too.
+
+**Mouse:** for now the only thing the mouse does is click (with `regenerateOnClick`). The mouse force is built but switched off (`interaction.enabled` in `src/lib/theme.js`): when on, the mouse acts like a hand moving through water or gas, pushing cells along the stroke (faster strokes push harder, bigger cells are heavier, overlapping cells drag each other along, and a spring slowly returns every cell to where it started). The old sideways push, `moveCellsWithMouse`, is also kept but not used.
 
 **Resizing:** leave `width`/`height` off and size the element with CSS (e.g. `cumulus-canvas { width: 100%; height: 400px }`) to make the cloud fill its container. It is rebuilt when the element's size changes, drawn at the device pixel ratio current at that time (a zoom or monitor change on its own does not trigger a rebuild yet).
 
@@ -70,14 +74,16 @@ Tests use Node's built-in runner and run without a browser. The custom element i
 ### Next up (noted, not started)
 
 - [ ] **Line break sections that eat into adjacent lines.** Horizontal line breaks (gaps in a line) should be able to spread into the lines above and below, mainly along the bottom of the cloud and the top and bottom border of the canvas. (Related source TODO: higher probability and longer line breaks on the first and last line.)
-- [ ] **Sunset timelapse.** See "Sunset mode" below; the theme object and `applyTheme` are ready for it.
-- [ ] **Enforce a minimum base width for the cloud.** (Related source TODO: minimum base width for the matched bottom cell.)
+- [x] **Sunset timelapse.** The `sunset` attribute (and a button on the demo page) fades the sky from blue to orange, through a dusk with a blue top and orange bottom, while the shadow rises to vertical. Built from two themes and a theme transition function (see CLAUDE.md).
+- [x] **Enforce a minimum base width for the cloud.** The two cells at the base are at least `cloud.minBaseWidth` (default 1) dome radii apart, set in the theme. This changes most existing seeds (157 of 200 tried).
+
+- [ ] **Keep the cloud inside the canvas.** The dome radius now fits the canvas across as well as up (600x400 went from 200 to 185), which cut the clouds that overflow on 600x400 from about 6% to about 1% of seeds (worst 13px over). Portrait and square canvases were already width-limited and still have about 1% overflow (worst 10px). To remove the rest: fit the cloud to the canvas after it is built (only changes the clouds that overflow).
 
 ### Requested features
 
 - [x] **Rebuild on attribute change** – `observedAttributes` / `attributeChangedCallback`, `ResizeObserver`, `disconnectedCallback` cleanup, all through one `rebuild()`.
 - [x] **Grow-in animation** – `growIn` attribute. The cloud is scaled up from the middle of its base with an ease-out curve. The fractals (fluff) grow with the cells by default; set `animation.fractalLag` in the theme to make them appear later.
-- [ ] **Sunset mode** – slowly shift the palette (sky, cloud lit/shadow colours) and rotate the shadow diagonal angle/origin to mimic a sunset timelapse. (The theme object and `applyTheme` are in place for this.)
+- [x] **Sunset mode** – see above. Could also shift the cloud's own colours (lit side warmer, shadow darker), which the theme transition already supports.
 - [x] **Click to regenerate** – `regenerateOnClick` attribute. The cloud shrinks away, then a new one (new random seed) grows.
 - [ ] **Morph on click** – try morphing the old cloud into the new one on click, without shrinking away first.
 - [x] **Force-based mouse interaction** – see above. Vertical movement is limited (`verticalStrength` 0.2) because the fills tear sooner with it.

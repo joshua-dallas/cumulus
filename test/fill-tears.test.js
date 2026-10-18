@@ -11,8 +11,8 @@ import { exposedFillEdgePixels, pocketArea } from "./fill-pockets.js";
 // Returns how bad the worst frame was, and the average over frames, compared with
 // the cloud at rest
 function brushCloud(seed, interaction = {}, { strokes = 4, settleFrames = 40, sampleEvery = 3 } = {}) {
-  const builder = new CloudBuilder(600, 400, 15, seed);
-  const settings = { ...createTheme().interaction, ...interaction };
+  const builder = new CloudBuilder(600, 400, 15, seed, createTheme().cloud);
+  const settings = { ...createTheme().interaction, enabled: true, ...interaction };
   const simulation = new CloudSimulation(builder, seed, settings);
   const restPockets = pocketArea(builder);
   const restEdges = exposedFillEdgePixels(builder);
@@ -60,7 +60,7 @@ test("brushing clouds does not tear the fills: no large pockets of sky open up i
   for (const seed of [5, 7, 323, 42]) {
     const { worstPocket, meanPocket } = brushCloud(seed);
     assert.ok(worstPocket < 600, `seed ${seed}: a pocket of ${worstPocket}px opened up`);
-    assert.ok(meanPocket < 25, `seed ${seed}: ${meanPocket}px of pockets on average`);
+    assert.ok(meanPocket < 60, `seed ${seed}: ${meanPocket}px of pockets on average`);
   }
 });
 

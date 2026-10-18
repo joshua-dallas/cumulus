@@ -8,6 +8,8 @@ import {
   intersectionOfMany,
   clamp,
   perlinNoise1D,
+  lerp,
+  mixColours,
 } from "../src/lib/utils.js";
 
 test("mulberry32 gives the same sequence for the same seed", () => {
@@ -111,4 +113,28 @@ test("perlinNoise1D uses one random number per node, and copes with small inputs
   assert.equal(perlinNoise1D(mulberry32(1), 20, 0).length, 20); // fewer than 2 nodes is treated as 2
   assert.deepEqual(perlinNoise1D(mulberry32(1), 1, 5), [0]);
   assert.deepEqual(perlinNoise1D(mulberry32(1), 0, 5), []);
+});
+
+// ---- colours ----
+
+test("lerp goes from a to b", () => {
+  assert.deepEqual([lerp(10, 20, 0), lerp(10, 20, 0.25), lerp(10, 20, 1)], [10, 12.5, 20]);
+});
+
+test("mixColours mixes hue, saturation and lightness", () => {
+  const a = { hue: 100, sat: 20, light: 40 };
+  const b = { hue: 140, sat: 60, light: 80 };
+  assert.deepEqual(mixColours(a, b, 0), a);
+  assert.deepEqual(mixColours(a, b, 1), b);
+  assert.deepEqual(mixColours(a, b, 0.5), { hue: 120, sat: 40, light: 60 });
+});
+
+test("mixColours takes the shortest way round the colour wheel", () => {
+  const red = { hue: 350, sat: 50, light: 50 };
+  assert.equal(mixColours(red, { ...red, hue: 10 }, 0.5).hue, 0); // through 0, not 180
+  assert.equal(mixColours({ ...red, hue: 10 }, red, 0.5).hue, 0);
+
+  // Blue to orange, with the orange just past red: through purple, not through green
+  const mid = mixColours({ hue: 206, sat: 50, light: 50 }, { hue: 20, sat: 50, light: 50 }, 0.5);
+  assert.equal(mid.hue, 293);
 });

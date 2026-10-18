@@ -21,12 +21,88 @@
           growIn
           regenerateOnClick
         ></cumulus-canvas>
-        <p class="mt-2 text-sm text-slate-500">Click the cloud to make a new one.</p>
+        <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-500">
+          <p>Click the cloud to make a new one.</p>
+          <p>Seed: <span id="seed" class="font-mono font-medium text-blue-950"></span></p>
+          <button
+            id="sunset-button"
+            type="button"
+            aria-pressed="false"
+            class="rounded-md bg-blue-950 px-3 py-1.5 font-medium text-white hover:bg-blue-900"
+          >
+            Sunset
+          </button>
+        </div>
+      </section>
+      <section class="mt-6 rounded-lg bg-white p-4 shadow-xl">
+        <h2 class="text-lg font-semibold">Shadow edge</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          The angle is measured from the bottom of the canvas (90&deg; is vertical). The offset is how far
+          across the canvas the edge meets the bottom. Day sliders show in the day, sunset sliders when
+          the sunset is on.
+        </p>
+        <div class="mt-4 grid gap-x-10 gap-y-4 sm:grid-cols-2">
+          <label class="block text-sm">
+            <span class="flex justify-between"><span>Day angle</span><output id="day-angle-value" class="font-mono"></output></span>
+            <input id="day-angle" type="range" min="10" max="170" step="1" class="w-full" />
+          </label>
+          <label class="block text-sm">
+            <span class="flex justify-between"><span>Sunset angle</span><output id="sunset-angle-value" class="font-mono"></output></span>
+            <input id="sunset-angle" type="range" min="10" max="170" step="1" class="w-full" />
+          </label>
+          <label class="block text-sm">
+            <span class="flex justify-between"><span>Day offset</span><output id="day-offset-value" class="font-mono"></output></span>
+            <input id="day-offset" type="range" min="0" max="100" step="1" class="w-full" />
+          </label>
+          <label class="block text-sm">
+            <span class="flex justify-between"><span>Sunset offset</span><output id="sunset-offset-value" class="font-mono"></output></span>
+            <input id="sunset-offset" type="range" min="0" max="100" step="1" class="w-full" />
+          </label>
+        </div>
       </section>
     </main>
     <script type="module">
       import "../src/define.js";
-      // demo-specific interaction code here, or in demo.js
+      import { createSunsetTheme, createTheme } from "../src/lib/theme.js";
+
+      const cloud = document.getElementById("c1");
+
+      // Show the seed of the cloud, and update it when a click makes a new one
+      const seed = document.getElementById("seed");
+      seed.textContent = cloud.currentSeed;
+      cloud.addEventListener("seedchange", (event) => {
+        seed.textContent = event.detail.seed;
+      });
+
+      // The sunset is an attribute of the element: adding it fades the sky to a sunset,
+      // and removing it fades back
+      const button = document.getElementById("sunset-button");
+      button.addEventListener("click", () => {
+        const sunset = cloud.toggleAttribute("sunset");
+        button.textContent = sunset ? "Back to day" : "Sunset";
+        button.setAttribute("aria-pressed", String(sunset));
+      });
+
+      // Sliders for where the edge of the shadow is, in the day and in the sunset
+      const day = createTheme().shadowDiagonal;
+      const sunset = createSunsetTheme().shadowDiagonal;
+      const toDegrees = (radians) => Math.round((radians * 180) / Math.PI);
+      const sliders = [
+        { id: "day-angle", stage: "day", key: "angle", start: toDegrees(day.angle), unit: "\u00b0", read: (v) => (v * Math.PI) / 180 },
+        { id: "sunset-angle", stage: "sunset", key: "angle", start: toDegrees(sunset.angle), unit: "\u00b0", read: (v) => (v * Math.PI) / 180 },
+        { id: "day-offset", stage: "day", key: "xOriginRatio", start: Math.round(day.xOriginRatio * 100), unit: "%", read: (v) => v / 100 },
+        { id: "sunset-offset", stage: "sunset", key: "xOriginRatio", start: Math.round(sunset.xOriginRatio * 100), unit: "%", read: (v) => v / 100 },
+      ];
+      for (const { id, stage, key, start, unit, read } of sliders) {
+        const input = document.getElementById(id);
+        const value = document.getElementById(`${id}-value`);
+        input.value = start;
+        value.textContent = `${start}${unit}`;
+        input.addEventListener("input", () => {
+          value.textContent = `${input.value}${unit}`;
+          cloud.setShadowDiagonal({ [stage]: { [key]: read(Number(input.value)) } });
+        });
+      }
     </script>
   </body>
 </html>

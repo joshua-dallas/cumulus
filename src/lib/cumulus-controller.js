@@ -1,7 +1,12 @@
 import { CloudBuilder } from "./cloud-builder.js";
 import { CloudSimulation } from "./cloud-simulation.js";
 import { HatchedRenderer } from "./hatched-renderer.js";
-import { createTheme } from "./theme.js";
+import {
+  BLENDED_SECTIONS,
+  createSunsetKeyframes,
+  createTheme,
+  themeAtProgress,
+} from "./theme.js";
 import { clamp01, easeInOutCubic, easeOutCubic } from "./easing.js";
 
 // The longest time one frame can advance the animations by. A paused or
@@ -14,8 +19,8 @@ const MAX_FRAME_MS = 100;
 // config and thrown away with destroy() when that config changes.
 //
 // config: { width, height, numCells, seed, lineWidth, lineSpacing,
-//           animate, growIn, regenerateOnClick, theme,
-//           onSeedChange, randomSeed, now }
+//           animate, growIn, regenerateOnClick, sunset, sunsetDuration, shadowDiagonal,
+//           theme, onSeedChange, randomSeed, now }
 //   animate: false draws the finished cloud once, with no animation loop,
 //            no mouse push and no grow or shrink animation (used for
 //            prefers-reduced-motion)
@@ -23,6 +28,11 @@ const MAX_FRAME_MS = 100;
 //   regenerateOnClick: clicking the cloud shrinks it away and grows a new
 //            one, with a new random seed. Without animation the new cloud
 //            replaces it immediately
+//   sunset: the sky starts as a sunset. setSunset(on) changes to or from one,
+//            fading over sunsetDuration ms (see transitionTheme)
+//   shadowDiagonal: { day: { angle, xOriginRatio }, sunset: { angle, xOriginRatio } }
+//            changes where the edge of the shadow is, in the day and in the sunset
+//            (see setShadowDiagonal). Angles are in radians
 //   onSeedChange(seed): called when a click gives the cloud a new seed
 //   randomSeed(): picks the seed for a new cloud. now(): the clock, in ms
 //
@@ -32,7 +42,6 @@ const MAX_FRAME_MS = 100;
 //
 // TODO: Morph straight from the old cloud to the new one on click, without
 // shrinking away first
-// TODO: Sunset mode belongs here
 
 export class CumulusController {
   constructor(canvas, config) {
@@ -42,6 +51,18 @@ export class CumulusController {
     this.growIn = this.animate && (config.growIn ?? false);
     this.regenerateOnClick = config.regenerateOnClick ?? false;
     this.theme = config.theme ?? createTheme();
+
+    // The sunset is a path through themes: the day, a dusk with a blue sky orange at
+    // the bottom, and the sunset. The first is a copy of the day theme, as this.theme
+    // is changed to match the point along the path (see applyThemeProgress)
+    this.sunsetOptions = {}; // Where the shadow is in the sunset, if not the default
+    this.sunsetKeyframes = createSunsetKeyframes(structuredClone(this.theme), this.sunsetOptions);
+    this.setShadowSettings(config.shadowDiagonal);
+    this.sunsetDuration = config.sunsetDuration ?? 6000;
+    this.themeProgress = config.sunset ? 1 : 0; // 0 is the day, 1 is the sunset
+    this.themeAnimation = null;
+    this.applyThemeProgress(this.sunsetKeyframes, this.themeProgress);
+
     this.now = config.now ?? (() => performance.now());
     this.randomSeed = config.randomSeed ?? (() => Math.floor(Math.random() * 1e6));
 
@@ -91,7 +112,10 @@ export class CumulusController {
       const point = this.canvasPoint(event);
       if (this.isOverCloud(point.x, point.y)) this.regenerate();
     };
-    if (this.animate || this.regenerateOnClick) {
+    // The mouse is only followed if it can do something: push the cloud, or click it
+    const followMouse =
+      this.regenerateOnClick || (this.animate && this.theme.interaction.enabled);
+    if (followMouse) {
       this.canvas.addEventListener("mousemove", this.onMouseMove);
       this.canvas.addEventListener("mouseleave", this.onMouseLeave);
     }
@@ -99,6 +123,7 @@ export class CumulusController {
       this.canvas.addEventListener("click", this.onClick);
     }
 
+    this.renderer.clearCanvas(); // to the paper colour, before the first drawing
     this.drawFrame();
     this.updateLoop();
   }
@@ -107,7 +132,7 @@ export class CumulusController {
   buildCloud(seed) {
     const { width, height, numCells } = this.config;
     this.seed = seed;
-    this.builder = new CloudBuilder(width, height, numCells, seed);
+    this.builder = new CloudBuilder(width, height, numCells, seed, this.theme.cloud);
     this.simulation = new CloudSimulation(this.builder, seed, this.theme.interaction);
 
     // The cloud grows and shrinks about the middle of its base
@@ -171,6 +196,92 @@ export class CumulusController {
   replaceCloud(seed) {
     this.buildCloud(seed);
     this.config.onSeedChange?.(seed);
+  }
+
+  //----------------------------------------------------//
+  // Changing the theme: the sunset
+  //----------------------------------------------------//
+
+  // Fades to a sunset, or back to the day. The sky slowly changes from blue to orange
+  // and the shadow on the cloud rises, over duration ms for the whole change (less if
+  // it is already part of the way there)
+  setSunset(on, duration = this.sunsetDuration) {
+    if (this.destroyed) return;
+
+    const target = on ? 1 : 0;
+    const distance = Math.abs(target - this.themeProgress);
+    this.transitionTheme(this.sunsetKeyframes, this.themeProgress, target, duration * distance);
+  }
+
+  // Animates the theme through a list of themes, in either direction. Progress is
+  // how far along the list: 0 is the first theme and 1 is the last, with the others
+  // evenly between. The theme changes from progress `from` to `to` over `duration` ms.
+  // Without animation (reduced motion), or with no time, the change is immediate
+  transitionTheme(keyframes, from, to, duration) {
+    if (!this.animate || duration <= 0) {
+      this.themeAnimation = null;
+      this.themeProgress = to;
+      this.applyThemeProgress(keyframes, to);
+      this.redraw();
+      return;
+    }
+
+    this.themeProgress = from;
+    this.themeAnimation = { keyframes, from, to, duration, elapsed: 0 };
+    this.updateLoop();
+  }
+
+  // Moves the theme animation on by dt ms. Returns true if the theme changed
+  advanceThemeAnimation(dt) {
+    const animation = this.themeAnimation;
+    if (!animation) return false;
+
+    animation.elapsed += dt;
+    const progress = clamp01(animation.elapsed / animation.duration);
+    const eased = easeInOutCubic(progress);
+    this.themeProgress = animation.from + (animation.to - animation.from) * eased;
+    if (progress >= 1) {
+      this.themeProgress = animation.to;
+      this.themeAnimation = null;
+    }
+
+    this.applyThemeProgress(animation.keyframes, this.themeProgress);
+    return true;
+  }
+
+  // Changes where the edge of the shadow is, for the day and for the sunset:
+  //   { day: { angle, xOriginRatio }, sunset: { angle, xOriginRatio } }
+  // Anything left out is not changed. The angle is in radians, from the bottom
+  // of the canvas; the ratio is how far across the canvas (0 to 1) the edge meets it
+  setShadowDiagonal(settings) {
+    this.setShadowSettings(settings);
+    this.applyThemeProgress(this.sunsetKeyframes, this.themeProgress);
+    this.redraw();
+  }
+
+  setShadowSettings({ day = {}, sunset = {} } = {}) {
+    const oldKeyframes = this.sunsetKeyframes;
+
+    // The day is the first of the stages, a copy of the theme. The sunset is made from it
+    for (const key of ["angle", "xOriginRatio"]) {
+      if (day[key] !== undefined) oldKeyframes[0].shadowDiagonal[key] = day[key];
+    }
+    if (sunset.angle !== undefined) this.sunsetOptions.shadowAngle = sunset.angle;
+    if (sunset.xOriginRatio !== undefined) this.sunsetOptions.shadowXOriginRatio = sunset.xOriginRatio;
+
+    this.sunsetKeyframes = createSunsetKeyframes(oldKeyframes[0], this.sunsetOptions);
+    if (this.themeAnimation?.keyframes === oldKeyframes) {
+      this.themeAnimation.keyframes = this.sunsetKeyframes; // carry on with the new ones
+    }
+  }
+
+  // Makes the theme the one that is a given way along a list of themes. Only the
+  // parts that the themes blend change; this.theme itself stays the same object
+  applyThemeProgress(keyframes, progress) {
+    const blended = themeAtProgress(keyframes, progress);
+    // Copies, so that the theme never shares parts with one of the themes it blends
+    for (const section of BLENDED_SECTIONS) this.theme[section] = structuredClone(blended[section]);
+    this.renderer?.updateTheme(this.theme);
   }
 
   // Moves the grow or shrink animation on by dt ms. Returns true if the size changed
@@ -250,12 +361,13 @@ export class CumulusController {
 
     // Fills and the picture only need updating if something moved or changed size
     const resized = this.advanceAnimation(dt);
+    const restyled = this.advanceThemeAnimation(dt);
     // The mouse only acts on a cloud that has finished growing, as until then what is
     // drawn is not where the cells are
     const cursor = this.scale === 1 ? this.cursor : null;
     const moved = this.simulation.step(cursor, dt);
     if (moved) this.builder.updateFills();
-    if (moved || resized) this.redraw();
+    if (moved || resized || restyled) this.redraw();
   }
 
   redraw() {

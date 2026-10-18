@@ -190,3 +190,18 @@ export function distanceBetweenPoints(x1, y1, x2, y2) {
 export function clamp(val, min, max) {
   return Math.min(Math.max(min, val), max);
 }
+
+export function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+// Mixes two { hue, sat, light } colours: t = 0 is a, t = 1 is b. The hue takes the
+// shortest way round the colour wheel, so 350 to 10 goes through 0, not through 180
+export function mixColours(a, b, t) {
+  const hueChange = ((b.hue - a.hue + 540) % 360) - 180;
+  return {
+    hue: (a.hue + hueChange * t + 360) % 360,
+    sat: lerp(a.sat, b.sat, t),
+    light: lerp(a.light, b.light, t),
+  };
+}

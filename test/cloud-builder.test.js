@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { CloudBuilder } from "../src/lib/cloud-builder.js";
 
-const build = (seed = 323, numCells = 15, width = 600, height = 400) =>
-  new CloudBuilder(width, height, numCells, seed);
+const build = (seed = 323, numCells = 15, width = 600, height = 400, options) =>
+  new CloudBuilder(width, height, numCells, seed, options);
 
 // Everything the builder generates, as plain data
 const snapshot = (builder) => ({
@@ -27,12 +27,74 @@ test("different seeds build different clouds", () => {
 // how clouds are generated, every existing seed now gives a different cloud:
 // update the hash on purpose. If you did not mean to change clouds, you have
 // added, removed or reordered a this.random() call in CloudBuilder.
+const hashOf = (builder) =>
+  createHash("sha1").update(JSON.stringify(snapshot(builder))).digest("hex");
+
 test("seed 323 still builds the same cloud (random call order is stable)", () => {
-  const hash = createHash("sha1")
-    .update(JSON.stringify(snapshot(build(323))))
-    .digest("hex");
-  assert.equal(hash, "7ca51f4df701c63507277a4dfbf7e01b7743212d");
+  assert.equal(hashOf(build(323)), "b5f9f5a87788a7bae4c328dedde31f1e36ef37c5");
 });
+
+// The minimum base width moves a cell but does not use or skip any random numbers.
+// (Checked once against the builder before the minimum existed: with no minimum,
+// every portrait and square cloud tried was identical. Landscape clouds then changed
+// size, as the dome radius was made to fit the width as well as the height.)
+test("with no minimum base width, seed 323 builds the cloud it should", () => {
+  const noMinimum = build(323, 15, 600, 400, { minBaseWidth: 0 });
+  assert.equal(hashOf(noMinimum), "4345398336329e153b206928bb272bbad3ecffd1");
+});
+
+test("the dome is small enough for the cloud to fit the canvas across as well as up", () => {
+  for (const [width, height] of [[600, 400], [500, 500], [300, 700], [800, 300], [900, 400]]) {
+    const { radius } = build(1, 15, width, height).dome;
+    const { MIN_PADDING_RATIO, MAX_CELL_RADIUS } = CloudBuilder;
+    assert.ok(radius * (2 + 2 * MAX_CELL_RADIUS) <= width * (1 - MIN_PADDING_RATIO) + 1, `${width}x${height} too wide`);
+    assert.ok(radius * (1 + 2 * MAX_CELL_RADIUS) <= height * (1 - MIN_PADDING_RATIO) + 1, `${width}x${height} too tall`);
+  }
+  assert.equal(build(1, 15, 600, 400).dome.radius, 185); // was 200, from the height alone
+});
+
+// ---- the base of the cloud ----
+
+// The distance between the middles of the two cells at the base
+const baseWidth = (builder) => {
+  const [a, b] = builder.bottomCellIds.map((id) => builder.cellsById.get(id));
+  return Math.abs(a.x - b.x);
+};
+
+test("the two cells at the base of the cloud are at least the minimum base width apart", () => {
+  for (let seed = 0; seed < 60; seed++) {
+    for (const minBaseWidth of [0.5, 0.8, 1]) { // up to the dome radius always fits in the canvas
+      const builder = build(seed, 15, 600, 400, { minBaseWidth });
+      assert.ok(
+        baseWidth(builder) >= minBaseWidth * builder.dome.radius,
+        `seed ${seed}: ${baseWidth(builder)}px is less than ${minBaseWidth} x ${builder.dome.radius}`,
+      );
+    }
+  }
+});
+
+test("the base cells are the lowest cell and one on the other side of the centre, with matching bottoms", () => {
+  const builder = build(7);
+  const [lowest, matched] = builder.bottomCellIds.map((id) => builder.cellsById.get(id));
+  assert.equal(lowest.y + lowest.radius, matched.y + matched.radius);
+  assert.ok((lowest.sim.baseLocation.x - builder.dome.x) * (matched.sim.baseLocation.x - builder.dome.x) <= 0);
+});
+
+test("the minimum base width only moves the cell it has to, and the default is the dome radius", () => {
+  const wide = build(5, 15, 600, 400, { minBaseWidth: 1 });
+  const none = build(5, 15, 600, 400, { minBaseWidth: 0 });
+  assert.ok(baseWidth(wide) >= wide.dome.radius);
+  assert.ok(baseWidth(wide) >= baseWidth(none));
+  assert.equal(build(5).options.minBaseWidth, 1);
+
+  // A cloud whose base is already wide enough is not changed
+  const wideEnough = [...Array(60).keys()].find((seed) => {
+    const a = build(seed, 15, 600, 400, { minBaseWidth: 0 });
+    return baseWidth(a) >= a.dome.radius;
+  });
+  assert.equal(hashOf(build(wideEnough, 15, 600, 400, { minBaseWidth: 0 })), hashOf(build(wideEnough)));
+});
+
 
 test("cells can be looked up by id, even after sorting by size", () => {
   const builder = build();

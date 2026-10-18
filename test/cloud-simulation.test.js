@@ -6,7 +6,8 @@ import { createTheme } from "../src/lib/theme.js";
 
 const setup = () => {
   const builder = new CloudBuilder(600, 400, 15, 323);
-  return { builder, simulation: new CloudSimulation(builder, 323) };
+  const interaction = { ...createTheme().interaction, enabled: true };
+  return { builder, simulation: new CloudSimulation(builder, 323, interaction) };
 };
 
 // Steps until the simulation reports that nothing moved
@@ -16,6 +17,16 @@ const settle = (simulation, cursor, maxSteps = 5000) => {
   }
   assert.fail("the simulation never came to rest");
 };
+
+test("the mouse does nothing unless it is switched on", () => {
+  const builder = new CloudBuilder(600, 400, 15, 323);
+  const simulation = new CloudSimulation(builder, 323, { ...createTheme().interaction, enabled: false });
+  const before = builder.cells.map((cell) => [cell.x, cell.y]);
+  const cx = builder.dome.x;
+  const cy = builder.dome.y - builder.dome.radius / 2;
+  for (let i = 0; i <= 20; i++) assert.equal(simulation.step({ x: cx - 150 + i * 15, y: cy }, 16), false);
+  assert.deepEqual(builder.cells.map((cell) => [cell.x, cell.y]), before);
+});
 
 test("a cloud at rest with no cursor does not change", () => {
   const { simulation } = setup();
@@ -72,7 +83,7 @@ function makeCloud(cellSpecs, interaction = {}) {
     sim: { baseLocation: { x, y } },
   }));
   const builder = { dome: { x: 300, y: 300, radius: 100 }, width: 600, height: 400, cells };
-  const settings = { ...createTheme().interaction, ...interaction };
+  const settings = { ...createTheme().interaction, enabled: true, ...interaction };
   return { cells, simulation: new CloudSimulation(builder, 1, settings) };
 }
 
@@ -236,8 +247,9 @@ test("cells that overlap are pulled along together; cells that do not are left a
   const specs = [[400, 200, 20], [420, 200, 20], [520, 200, 20]]; // the first two overlap
   const withCohesion = makeCloud(specs, { maxRelativeOffset: Infinity });
   stroke(withCohesion.simulation, { x: 340, y: 200 }, { x: 410, y: 200 }, 1200);
-  assert.ok(offset(withCohesion.cells[1]).x > 1); // dragged along without being touched
-  assert.equal(offset(withCohesion.cells[2]).x, 0);
+  assert.ok(offset(withCohesion.cells[0]).x > 0);
+  assert.ok(offset(withCohesion.cells[1]).x > 0); // dragged along (the stroke also reaches it a little)
+  assert.equal(offset(withCohesion.cells[2]).x, 0); // too far away to be moved
 
   const without = makeCloud(specs, { neighbourStiffness: 0, maxRelativeOffset: Infinity });
   stroke(without.simulation, { x: 340, y: 200 }, { x: 410, y: 200 }, 1200);

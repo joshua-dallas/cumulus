@@ -42,7 +42,8 @@ export class CloudSimulation {
   // Returns true if anything moved.
   step(cursor, dt = 16) {
     let changed = false;
-    changed = this.forceStep(cursor, dt) || changed;
+    // The mouse only moves the cloud if it is switched on (theme.interaction.enabled)
+    if (this.interaction.enabled) changed = this.forceStep(cursor, dt) || changed;
     // The old sideways mouse push is not used now that the mouse is a force.
     // moveCellsWithMouse itself is unchanged
     //changed = this.moveCellsWithMouse(cursor) || changed;

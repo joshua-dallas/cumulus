@@ -1,8 +1,10 @@
+import { defaultTheme } from "./theme.js";
 import {
   mulberry32,
   intersectionOfMany,
   subtractRanges,
   getHorizontalLinesOfPolygon,
+  clamp,
 } from "./utils.js";
 
 // NOTE: Every call to this.random() is part of the public contract of a seed.
@@ -16,27 +18,28 @@ export class CloudBuilder {
   static MIN_CELL_RADIUS = 0.1; // Minimum cell radius as a fraction of the dome radius
   static MAX_CELL_RADIUS = 0.3; // Maximum cell radius as a fraction of the dome radius
   // TODO: Add additional padding to allow for cells to grow and rise
-  // TODO: Minimum base width for matched bottom cell?
   // TODO: Find weighted centre of cells and position in the centre
   // TODO: Flag what lines have changed between animation frames
 
-  constructor(width = 500, height = 500, numCells = 10, seed = 42) {
+  // options is the cloud part of a theme (see theme.js):
+  //   minBaseWidth: the least distance between the middles of the two cells at the
+  //   base of the cloud, as a multiple of the dome radius. 0 is no minimum
+  constructor(width = 500, height = 500, numCells = 10, seed = 42, options = defaultTheme.cloud) {
+    this.options = options;
     this.random = mulberry32(seed);
     this.width = width;
     this.height = height;
 
-    // Calculate the dome radius based on the smaller dimension of the canvas
-    let radius;
-    if (width > height) {
-      radius =
-        (height * (1 - CloudBuilder.MIN_PADDING_RATIO)) /
-        (1 + 2 * CloudBuilder.MAX_CELL_RADIUS); // Adjust for vertical padding and maximum cell radius
-    } else {
-      radius =
-        (width * (1 - CloudBuilder.MIN_PADDING_RATIO)) /
-        (2 + 2 * CloudBuilder.MAX_CELL_RADIUS); // Adjust for horizontal padding and maximum cell radius
-    }
-    radius = Math.round(radius); // Round to the nearest integer
+    // Calculate the dome radius so that the cloud fits in the canvas in both directions.
+    // The dome is a half circle, so it is as tall as its radius and as wide as twice it,
+    // and the cells around it add their maximum radius to each side
+    const heightRadius =
+      (height * (1 - CloudBuilder.MIN_PADDING_RATIO)) /
+      (1 + 2 * CloudBuilder.MAX_CELL_RADIUS); // Adjust for vertical padding and maximum cell radius
+    const widthRadius =
+      (width * (1 - CloudBuilder.MIN_PADDING_RATIO)) /
+      (2 + 2 * CloudBuilder.MAX_CELL_RADIUS); // Adjust for horizontal padding and maximum cell radius
+    const radius = Math.round(Math.min(heightRadius, widthRadius)); // Round to the nearest integer
 
     // Calculate the dome center based on the dome radius and canvas dimensions
     let x = this.width / 2;
@@ -128,11 +131,22 @@ export class CloudBuilder {
 
     // Place the new cell on the opposite side of the dome centre to the lowest cell
     const side = lowestCell.x > this.dome.x ? -1 : 1;
-    this.addCell({
-      x: Math.round(this.dome.x + side * horizontalOffset),
-      y,
-      radius,
-    });
+    let x = Math.round(this.dome.x + side * horizontalOffset);
+
+    // The two cells at the base must be a minimum distance apart, or the base of
+    // the cloud is too narrow. The random numbers above are still used, so the rest
+    // of the cloud is built from the same stream as without a minimum. If the cells
+    // are too close, the new one is moved further out, to just far enough
+    const minBaseWidth = this.options.minBaseWidth * this.dome.radius;
+    const baseWidth = Math.abs(x - lowestCell.x);
+    if (baseWidth < minBaseWidth) {
+      const offset = minBaseWidth - Math.abs(lowestCell.x - this.dome.x);
+      x = side > 0 ? Math.ceil(this.dome.x + offset) : Math.floor(this.dome.x - offset);
+      x = clamp(x, radius, Math.max(radius, this.width - radius)); // but not out of the canvas
+    }
+
+    const newCell = this.addCell({ x, y, radius });
+    this.bottomCellIds = [lowestCell.id, newCell.id];
   }
 
   addExtensionLines() {

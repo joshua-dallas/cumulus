@@ -27,7 +27,7 @@ Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`
 | `src/lib/cloud-builder.js` | `CloudBuilder`: seeded, pure-geometry cloud model. No canvas access. |
 | `src/lib/cloud-simulation.js` | `CloudSimulation`: moves cells/fractals over time (currently the mouse effect; `fractalSim` and `moveCloudCells` exist but are not called). Has its own PRNG. |
 | `src/lib/hatched-renderer.js` | `HatchedRenderer`: turns layers into per-scanline segments and strokes them. |
-| `src/lib/theme.js` | `defaultTheme` / `createTheme()`: colour palette, background/shadow settings and per-layer styles. |
+| `src/lib/theme.js` | `defaultTheme` / `createTheme()`: colour palette, sky (top/bottom colour), shadow, cloud shape settings, animation, mouse interaction and per-layer styles. Also the sunset themes and `blendThemes` / `themeAtProgress`. |
 | `src/lib/utils.js` | `mulberry32` PRNG, `perlinNoise1D`, 1-D range maths, polygon edge extraction, `clamp`, `distanceBetweenPoints`. |
 | `demo/` | Demo page + Tailwind stylesheet. |
 
@@ -111,6 +111,21 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 
 `createTheme()` returns a deep copy of `defaultTheme`. Layer styles refer to colours by name (`fill: "dark2"`); `CumulusController.resolveLayerStyles()` resolves them every frame. Add new visual constants here rather than inline in the controller.
 
+- **Paper.** The canvas is always cleared to see-through (`clearCanvas` is a `clearRect`), so the **spaces between lines** and the **line breaks** show whatever is behind the canvas on the page. `theme.background.paper` (white by default; unset means none) is the colour of the **padding gaps** inside a line: `drawSegmentRange` draws a gap segment as an ordinary stroked segment in the paper colour (no lightness noise, `getStrokeColour`), except the part in shadow, which draws what the gap cleared instead. It follows the owning layer's line width and wave.
+- **Sky.** `theme.background = { borderNoise, top, bottom, paper }`. `top` is `{hue, sat, light}`; `bottom` is optional and, if unset, the whole sky is `top`. The renderer gives each line its own colour (`backgroundColours`, mixed from top to bottom with `mixColours`, hue the short way round the wheel). `colours.background` no longer exists.
+- **Cloud.** `theme.cloud` is passed to `CloudBuilder` as its options (`this.options`). `minBaseWidth` (default 1) is the least distance between the middles of the two cells at the base, in dome radii; `matchBottomCell` moves the new cell further out if needed and never changes the `random()` calls (with `minBaseWidth: 0` the cloud is exactly the one built before it existed: there is a test). `builder.bottomCellIds` holds the two cells. Changing it changes existing seeds.
+- **Mouse.** `theme.interaction.enabled` switches the mouse force on; it is off. The controller only listens to the mouse if `regenerateOnClick` or the force is on.
+
+### Sunset and theme transitions
+
+- **Themes.** `createSunsetTheme(base)` is a copy of the theme with only the sky top colour (orange, hue 20 so the blue-to-orange fade goes through purple, not green) and the shadow angle (90°) changed. `createSunsetKeyframes(base)` returns `[day, dusk, sunset]`: dusk is a blue top with an orange bottom and the shadow half way.
+- **Blending.** `blendThemes(a, b, t)` mixes only `BLENDED_SECTIONS` (`colours`, `background`, `shadowDiagonal`): numbers are interpolated, `{hue,sat,light}` colours go through `mixColours`, a sky with no bottom blends as if its bottom were its top, anything else switches at the half way point. `themeAtProgress(keyframes, progress)` places the keyframes evenly along 0 to 1.
+- **Transition function.** `controller.transitionTheme(keyframes, from, to, duration)` animates `themeProgress` from `from` to `to` over `duration` ms with `easeInOutCubic`, on the frame clock (so it pauses with the loop and does not jump after a pause). Each frame `applyThemeProgress` writes the blended sections into **the same `controller.theme` object** (so references to `theme.interaction`, `animation` and `layers` stay valid), calls `renderer.updateTheme(theme)` and the frame redraws. Without animation (reduced motion) or with no time it applies at once.
+- **Sunset toggle.** `controller.setSunset(on, duration)` calls `transitionTheme` with the sunset keyframes from the current progress to 1 or 0, taking `duration` times the distance left (so reversing part way goes straight back without passing through dusk). Config `sunset: true` starts at 1 instantly. Keyframe 0 is a clone of the day theme, not the live theme.
+- **Renderer.** `applyTheme` (once, before `finaliseRenderer`: it sets the border and shadow-edge noise) calls `updateTheme`, which can be called any time after: it sets colours, sky and shadow angle/origin and recalculates the sky colours and `shadowDiagonalLocations` (cheap) without remaking noise.
+- **Shadow edge.** `controller.setShadowDiagonal({ day: { angle, xOriginRatio }, sunset: { ... } })` (radians; ratio 0 to 1; anything left out is unchanged) edits the day stage and the sunset options, rebuilds the keyframes (dusk is half way between, for both) and redraws; a transition in progress carries on to the new keyframes. `config.shadowDiagonal` sets them at creation, and the element keeps what was set through rebuilds. `createSunsetTheme/Keyframes` take `{ shadowAngle, shadowXOriginRatio }`. `themeAtProgress` returns a keyframe itself when exactly on it (so the day has no bottom colour), and the controller copies the blended sections into the live theme.
+- **Element.** `sunset` and `sunsetDuration` attributes (changing them does not rebuild the cloud); `currentSeed` property and a `seedchange` event (`detail.seed`, bubbles, composed) when a click gives a new seed.
+
 ### Cumulus element
 
 - Observed attributes (lower-case, as HTML lower-cases them): `width` (500), `height` (500), `numCells` (15), `seed` (5), `lineWidth` (1), `lineSpacing` (1.5), and the booleans `growIn` and `regenerateOnClick` (off by default; present = on unless `false`/`0`/`off`/`no`). `seed="0"` is valid; non-numeric values fall back to the default; `numCells` is at least 1.
@@ -121,6 +136,8 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 - `connectedCallback` sets up observers and builds; `disconnectedCallback` removes them and destroys the controller. The shadow root/canvas are created once and reused on reconnect.
 
 ## Known bugs / gotchas
+
+- A small number of seeds (about 1%) still build a cloud slightly past the canvas edge (up to about 13px), left or right, because stepped children and the base cell can extend past the dome. The dome radius is the smaller of the height-based and width-based radius. See the README.
 
 - `cursor` is `null` when the mouse is off the canvas (fixed; it used to default to `{0,0}`).
 - `generateFractalSimParams` compares relative `fractal.x` with absolute `cell.x` (`rightSide`); only matters for the unused fractal sim.
@@ -146,10 +163,11 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 | `utils.test.js` | PRNG determinism, range maths, `clamp`, `perlinNoise1D` (bounds, zero at nodes, scale, smoothness, node count) |
 | `cloud-builder.test.js` | determinism per seed, **golden hash for seed 323** (fails if `random()` call order changes), id lookup, fractal grouping, base locations, fill updates |
 | `cloud-simulation.test.js` | the force model on a small made-up cloud (no push when still or slow, push along the stroke, faster pushes further, heavier moves less and returns slower, falloff, no skipping, return without overshoot, walls, vertical strength, cohesion, relative limit, cursor reset, long frames, determinism), plus the old push called directly |
+| `theme.test.js` | the sunset theme (only a few things changed), the stages, blending (hue the short way, no-bottom sky, other sections untouched), progress through the stages |
 | `fill-tears.test.js`, `fill-pockets.js` | tear guard: random strokes over real clouds must not open pockets of sky or expose fill edges, and cohesion must tear less than none; the helper measures pockets and exposed edges on a simple raster, with its own tests |
 | `hatched-renderer.test.js` | `addSegment` overwrite/split, padding as gap segments (full width, persists when covered, shadow), edge-noise cache (including scaling with range), Perlin line width noise, `clear()` |
 | `easing.test.js` | endpoints and monotonic progress of the easing functions |
-| `cumulus-controller.test.js` | layer building and keys, animate on/off, pause/resume/destroy, only redraw when something moved, theme, grow-in (scale, eased progress, fractals growing with the cells (and `fractalLag`), no jump after pause, finished cloud identical to a static one), click to regenerate (shrink, new seed, ignored clicks, instant without animation, pointer cursor) |
+| `cumulus-controller.test.js` | layer building and keys, animate on/off, pause/resume/destroy, only redraw when something moved, theme, sunset (stages half way, reverse, reversing part way, redrawn each frame, instant without animation, same theme object), grow-in (scale, eased progress, fractals growing with the cells (and `fractalLag`), no jump after pause, finished cloud identical to a static one), click to regenerate (shrink, new seed, ignored clicks, instant without animation, pointer cursor) |
 
 The `Cumulus` element (`src/cumulus.js`) needs a DOM and is not covered: attribute rebuilds, the `growIn`/`regenerateOnClick` attributes, `ResizeObserver`, `IntersectionObserver` and reduced motion were checked by hand in headless Chrome over the DevTools protocol (`--force-prefers-reduced-motion` for the reduced-motion path; `--virtual-time-budget` does not run animation frames reliably, so use real time).
 

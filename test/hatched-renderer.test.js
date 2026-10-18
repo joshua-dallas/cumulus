@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { HatchedRenderer } from "../src/lib/hatched-renderer.js";
 import { mockCanvas } from "./helpers.js";
+import { createTheme } from "../src/lib/theme.js";
 
 // A renderer with 100px wide lines and a full-width background on line 0
 function setup() {
@@ -94,17 +95,20 @@ test("a later layer is drawn over earlier padding", () => {
   assert.equal(visibleAt(line.segments, 25), 1);
 });
 
-test("padding is not drawn, except in shadow where what it cleared is drawn instead", () => {
+test("padding is drawn as paper; in shadow there is no padding, and what it cleared is drawn instead", () => {
   const { renderer, line } = setup();
   addLayer(renderer, line, 40, 60, { rightPadding: 10 });
 
   const drawn = [];
-  renderer.drawSegment = (x1, x2, ln, segment) =>
-    drawn.push([x1, x2, segment.isBackground ? "background" : segment.layerId]);
+  renderer.drawSegment = (x1, x2, ln, segment) => {
+    const what = segment.isGap ? "paper" : segment.isBackground ? "background" : segment.layerId;
+    drawn.push([x1, x2, what]);
+  };
+  const drawnInOrder = () => drawn.sort((a, b) => a[0] - b[0]);
 
   renderer.hasShadowDiagonal = false;
   renderer.drawLine(line);
-  assert.deepEqual(drawn, [[0, 40, "background"], [40, 60, 0], [70, 100, "background"]]);
+  assert.deepEqual(drawnInOrder(), [[0, 40, "background"], [40, 60, 0], [60, 70, "paper"], [70, 100, "background"]]);
 
   // Everything left of x = 65 is in shadow, so the padding there (60 to 65) shows what it cleared
   drawn.length = 0;
@@ -112,12 +116,20 @@ test("padding is not drawn, except in shadow where what it cleared is drawn inst
   renderer.shadowDiagonalDirection = "left";
   renderer.shadowDiagonalLocations = [65];
   renderer.drawLine(line);
-  assert.deepEqual(drawn, [
+  assert.deepEqual(drawnInOrder(), [
     [0, 40, "background"],
     [40, 60, 0],
     [60, 65, "background"],
+    [65, 70, "paper"],
     [70, 100, "background"],
   ]);
+
+  // With no paper, the gap is left see-through
+  drawn.length = 0;
+  renderer.hasShadowDiagonal = false;
+  renderer.paper = undefined;
+  renderer.drawLine(line);
+  assert.deepEqual(drawnInOrder(), [[0, 40, "background"], [40, 60, 0], [70, 100, "background"]]);
 });
 
 test("edge noise is remembered per layer key, including an offset of 0", () => {
@@ -186,6 +198,103 @@ test("changing the number of Perlin nodes does not change the other noise", () =
   assert.deepEqual(few.lightness, many.lightness);
   assert.deepEqual(few.lineBreaks, many.lineBreaks);
   assert.deepEqual(few.yOffset, many.yOffset);
+});
+
+// A renderer set up the way the controller does it, with a theme
+function themedRenderer(theme = createTheme(), width = 200, height = 100) {
+  const renderer = new HatchedRenderer(mockCanvas(), width, height, 1, 1.5);
+  renderer.applyTheme(theme);
+  renderer.finaliseRenderer();
+  return renderer;
+}
+
+test("the sky is one colour from top to bottom when there is only a top colour", () => {
+  const theme = createTheme();
+  const renderer = themedRenderer(theme);
+
+  assert.ok(renderer.lines.length > 10);
+  assert.ok(renderer.backgroundColours.every((colour) => colour === theme.background.top));
+});
+
+test("the sky fades from the top colour to the bottom colour", () => {
+  const theme = createTheme();
+  theme.background.top = { hue: 200, sat: 60, light: 40 };
+  theme.background.bottom = { hue: 220, sat: 80, light: 80 };
+  const renderer = themedRenderer(theme);
+  const colours = renderer.backgroundColours;
+
+  assert.deepEqual(colours[0], theme.background.top);
+  assert.deepEqual(colours.at(-1), theme.background.bottom);
+  const middle = colours[Math.floor(colours.length / 2)];
+  assert.ok(middle.light > 55 && middle.light < 65);
+  for (let i = 1; i < colours.length; i++) assert.ok(colours[i].light >= colours[i - 1].light);
+});
+
+test("each line of the sky is drawn in its own colour", () => {
+  const theme = createTheme();
+  theme.background.bottom = { hue: 20, sat: 90, light: 62 };
+  const renderer = themedRenderer(theme);
+  const background = { isBackground: true };
+  const lightnessNoise = (line) => renderer.noise.lightness[line.id][0];
+
+  const [first, last] = [renderer.lines[0], renderer.lines.at(-1)];
+  assert.equal(
+    renderer.getStrokeColour(0, background, first),
+    `hsl(${theme.background.top.hue}, ${theme.background.top.sat}%, ${theme.background.top.light + lightnessNoise(first)}%)`,
+  );
+  assert.ok(renderer.getStrokeColour(0, background, last).startsWith("hsl(20, 90%"));
+});
+
+test("updateTheme restyles the sky and moves the shadow on lines that already exist", () => {
+  const renderer = themedRenderer();
+  const spread = () => {
+    const x = renderer.shadowDiagonalLocations;
+    return Math.max(...x) - Math.min(...x);
+  };
+
+  const slanted = spread(); // a diagonal edge: far apart at the top and bottom
+  assert.ok(slanted > 50);
+  const vertical = createTheme();
+  vertical.shadowDiagonal.angle = Math.PI / 2;
+  vertical.background.top = { hue: 20, sat: 90, light: 62 };
+  renderer.updateTheme(vertical);
+
+  assert.ok(spread() <= vertical.shadowDiagonal.edgeNoise); // a vertical edge: only the noise
+  assert.equal(renderer.backgroundColours[0], vertical.background.top);
+  assert.equal(renderer.colours, vertical.colours);
+});
+
+// A drawing context that records what is done to the canvas
+function recordingContext() {
+  const calls = [];
+  return {
+    calls,
+    set fillStyle(value) {
+      calls.push(["fillStyle", value]);
+    },
+    fillRect: (...args) => calls.push(["fillRect", ...args]),
+    clearRect: (...args) => calls.push(["clearRect", ...args]),
+  };
+}
+
+test("the canvas is cleared to see-through, so the page behind shows between the lines, even with paper", () => {
+  const theme = createTheme();
+  theme.background.paper = { hue: 40, sat: 30, light: 95 };
+  const renderer = themedRenderer(theme);
+  renderer.context = recordingContext();
+
+  renderer.clearCanvas();
+  assert.deepEqual(renderer.context.calls, [["clearRect", 0, 0, 200, 100]]);
+});
+
+test("a gap is plain paper colour, with no lightness noise", () => {
+  const theme = createTheme();
+  theme.background.paper = { hue: 40, sat: 30, light: 95 };
+  const renderer = themedRenderer(theme);
+  const gap = { isGap: true, layerId: 0 };
+  for (const x of [0, 10, 50, 120]) {
+    assert.equal(renderer.getStrokeColour(x, gap, renderer.lines[3]), "hsl(40, 30%, 95%)");
+  }
 });
 
 test("clear() empties every line and puts the background back", () => {

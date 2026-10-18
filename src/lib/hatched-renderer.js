@@ -1,5 +1,6 @@
 import {
   getVerticalLinesOfPolygon,
+  mixColours,
   mulberry32,
   perlinNoise1D,
 } from "./utils.js";
@@ -51,9 +52,14 @@ export class HatchedRenderer {
 
     // Default colour variables
     this.colours = {
-      background: { hue: 206, sat: 57, light: 60 },
       dark2: { hue: 0, sat: 0, light: 15 },
     };
+    // The sky fades from the top colour to the bottom colour, or is all the top
+    // colour if there is no bottom colour. backgroundColours is the colour of each line
+    this.backgroundTop = { hue: 206, sat: 57, light: 60 };
+    this.backgroundBottom = undefined;
+    this.backgroundColours = [];
+    this.paper = { hue: 0, sat: 0, light: 100 }; // the colour of padding gaps. None: see-through
 
     // Shadow diagonal variables
     // TODO: Create setters
@@ -111,18 +117,47 @@ export class HatchedRenderer {
   // Applies the renderer-related parts of a theme (see theme.js).
   // Must be called before finaliseRenderer(), as the noise depends on these values
   applyTheme(theme) {
-    this.colours = theme.colours;
     this.setBackgroundBorderNoise(theme.background.borderNoise);
+    this.shadowDiagonalEdgeNoise = theme.shadowDiagonal.edgeNoise;
+    this.updateTheme(theme);
+  }
+
+  // Applies the parts of a theme that can change after the renderer is set up,
+  // such as the colours and the angle of the shadow when blending to a sunset.
+  // The noise is not made again, so the border noise and the shadow edge noise
+  // must be the same as when applyTheme was called. Lines drawn after this use it
+  updateTheme(theme) {
+    this.colours = theme.colours;
+    this.backgroundTop = theme.background.top;
+    this.backgroundBottom = theme.background.bottom;
+    this.paper = theme.background.paper;
 
     const shadow = theme.shadowDiagonal;
     this.hasShadowDiagonal = shadow.enabled;
     this.shadowDiagonalXOrigin = this.width * shadow.xOriginRatio;
     this.shadowDiagonalDirection = shadow.direction;
     this.shadowDiagonalAngle = shadow.angle;
-    this.shadowDiagonalEdgeNoise = shadow.edgeNoise;
+
+    // The lines and noise are made by finaliseRenderer(). Before that there is
+    // nothing to update
+    if (this.noise.shadowDiagonal.length) {
+      this.updateBackgroundColours();
+      this.generateShadowDiagonalEdge();
+    }
   }
 
-  // Clears the pixels of the canvas (not the lines/layers, see clear())
+  // The colour of each line of the sky, fading from the top colour down to the
+  // bottom colour
+  updateBackgroundColours() {
+    const top = this.backgroundTop;
+    const bottom = this.backgroundBottom;
+    this.backgroundColours = this.lines.map((line, i) =>
+      bottom ? mixColours(top, bottom, i / Math.max(1, this.lines.length - 1)) : top,
+    );
+  }
+
+  // Clears the canvas (not the lines/layers, see clear()). It is made see-through, so
+  // that the spaces between the lines show what is behind the canvas on the page
   clearCanvas() {
     this.context.clearRect(0, 0, this.width, this.height);
   }
@@ -130,6 +165,7 @@ export class HatchedRenderer {
   finaliseRenderer() {
     this.generateLines();
     this.initialiseNoise(); //TODO: generate?
+    this.updateBackgroundColours();
     this.generateShadowDiagonalEdge();
     this.calculateBaseYOffset();
     this.addBackground();
@@ -424,14 +460,25 @@ export class HatchedRenderer {
   }
 
   // Draws the part of a segment between x1 and x2.
-  // Gaps (padding) are not drawn, except in shadow, where there is no padding
-  // and what the gap cleared is drawn instead
+  // A gap (padding) is drawn in the paper colour, so that it is blank paper in the
+  // line, unlike the spaces between lines, which are see-through. In shadow there
+  // is no padding, and what the gap cleared is drawn instead
   drawSegmentRange(segment, x1, x2, line, shadowRange) {
     if (x2 <= x1) return;
 
     if (!segment.isGap) {
       this.drawSegment(x1, x2, line, segment);
       return;
+    }
+
+    // The parts of the gap outside the shadow (one of the two is empty)
+    if (this.paper) {
+      const outside = shadowRange
+        ? [[x1, Math.min(x2, shadowRange.from)], [Math.max(x1, shadowRange.to), x2]]
+        : [[x1, x2]];
+      for (const [start, end] of outside) {
+        if (end > start) this.drawSegment(start, end, line, segment);
+      }
     }
 
     if (!shadowRange) return;
@@ -542,8 +589,13 @@ export class HatchedRenderer {
       // TODO: Does this work as intended?
       x1 / HatchedRenderer.DRAW_STEP,
     );
+    // A gap is plain paper, with no noise
+    if (segment.isGap) {
+      return `hsl(${this.paper.hue}, ${this.paper.sat}%, ${this.paper.light}%)`;
+    }
+
     // Get the colour of the segment
-    let colour = this.getColourOfSegment(segment);
+    let colour = this.getColourOfSegment(segment, line);
 
     // Apply the shadow diagonal if needed
     if (this.isInShadow(x1, line) && !segment.isBackground) {
@@ -557,10 +609,10 @@ export class HatchedRenderer {
     // TODO: More lightness noise in the shadow region?
   }
 
-  getColourOfSegment(segment) {
+  getColourOfSegment(segment, line) {
     let colour;
     if (segment.isBackground) {
-      colour = this.colours.background;
+      colour = this.backgroundColours[line.id];
     } else {
       colour = this.layers[segment.layerId].fill;
     }

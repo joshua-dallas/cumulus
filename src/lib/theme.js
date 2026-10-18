@@ -3,7 +3,10 @@
 // - colours: named { hue, sat, light } colours. Layers refer to these by name
 //   (see `fill` below), so changing a colour here, or at runtime for a sunset,
 //   restyles every layer that uses it.
-// - background / shadowDiagonal: applied to the renderer (HatchedRenderer.applyTheme).
+// - background: the sky, as a top colour and optionally a bottom colour to fade to.
+//   shadowDiagonal: the edge of the shadow on the cloud. Both are applied to the
+//   renderer (HatchedRenderer.applyTheme, updateTheme).
+// - cloud: the shape of the cloud, passed to CloudBuilder.
 // - animation: durations of the grow and shrink animations.
 // - interaction: how the mouse moves the cloud.
 // - layers: the style of each kind of shape. Noise values are "plus or minus
@@ -11,9 +14,10 @@
 //
 // Use createTheme() to get a copy that is safe to modify.
 
+import { lerp, mixColours } from "./utils.js";
+
 export const defaultTheme = {
   colours: {
-    background: { hue: 206, sat: 57, light: 60 },
     light: { hue: 0, sat: 0, light: 100 },
     mid: { hue: 0, sat: 0, light: 75 },
     dark: { hue: 0, sat: 0, light: 50 },
@@ -22,13 +26,30 @@ export const defaultTheme = {
 
   background: {
     borderNoise: 3,
+    top: { hue: 206, sat: 57, light: 60 },
+    // The colour of the paper: what the gaps (padding) beside the layers in a line are
+    // drawn in, so they are blank paper. The spaces between the lines are always
+    // see-through, and show whatever is behind the canvas on the page. If paper is not
+    // set, the gaps are see-through too
+    paper: { hue: 0, sat: 0, light: 100 },
+    // The colour at the bottom of the sky, fading from the top colour. If it is not
+    // set, the whole sky is the top colour
+    bottom: undefined,
+  },
+
+  // The shape of the cloud. These change which clouds the seeds make, so changing
+  // them changes every existing seed
+  cloud: {
+    // The distance between the middle of the two cells at the base of the cloud is at
+    // least this, as a multiple of the dome radius (the size of the cloud). 0 is no minimum
+    minBaseWidth: 1,
   },
 
   shadowDiagonal: {
     enabled: true,
     direction: "left", // The shadow is on the left of the diagonal
-    angle: (5 * Math.PI) / 6, // From the bottom x-axis
-    xOriginRatio: 0.7, // Where the diagonal meets the bottom of the canvas, as a ratio of the width
+    angle: (151 * Math.PI) / 180, // From the bottom x-axis
+    xOriginRatio: 0.75, // Where the diagonal meets the bottom of the canvas, as a ratio of the width
     edgeNoise: 30,
   },
 
@@ -48,6 +69,9 @@ export const defaultTheme = {
   // strokes push harder, heavier cells move less, and a spring slowly returns every
   // cell to where it started. Sizes are in pixels, times in seconds
   interaction: {
+    // Whether the mouse moves the cloud at all. Off for now: only clicking does anything
+    enabled: false,
+
     // The hand
     handRadius: 30, // Added to a cell's radius: how close the stroke must pass to push it
     minSpeed: 60, // px/s. Slower strokes do nothing, so a resting or jittering mouse is ignored
@@ -149,4 +173,103 @@ export const defaultTheme = {
 
 export function createTheme() {
   return structuredClone(defaultTheme);
+}
+
+//----------------------------------------------------//
+// Sunset, and blending between themes
+//----------------------------------------------------//
+
+// The orange of the sunset sky. The hue is just past the red end of orange, so that
+// from the blue of the day sky the shortest way round the colour wheel is through
+// purple and pink, as in a real sunset, and not through green
+const SUNSET_SKY = { hue: 20, sat: 90, light: 62 };
+export const SUNSET_SHADOW_ANGLE = (111 * Math.PI) / 180; // From the bottom x-axis
+export const SUNSET_SHADOW_X_ORIGIN_RATIO = 0.64;
+
+// The sunset theme: a copy of the theme with only a few things changed
+//   shadowAngle, shadowXOriginRatio: where the shadow edge is in the sunset
+export function createSunsetTheme(
+  base = createTheme(),
+  { shadowAngle = SUNSET_SHADOW_ANGLE, shadowXOriginRatio = SUNSET_SHADOW_X_ORIGIN_RATIO } = {},
+) {
+  const sunset = structuredClone(base);
+  sunset.background.top = { ...SUNSET_SKY };
+  sunset.background.bottom = undefined; // all orange
+  sunset.shadowDiagonal.angle = shadowAngle;
+  sunset.shadowDiagonal.xOriginRatio = shadowXOriginRatio;
+  return sunset;
+}
+
+// The stages of a sunset, from the day to the sunset, as themes to blend between:
+//   day: the theme as it is
+//   dusk: a blue sky that is orange at the bottom, and the shadow half way there
+//   sunset: an all orange sky and the shadow at its end
+// Fading back is the same stages in reverse. base is used as the first theme
+// itself (not copied), so that it is the one that is kept up to date
+export function createSunsetKeyframes(base = createTheme(), sunsetOptions = {}) {
+  const sunset = createSunsetTheme(base, sunsetOptions);
+
+  const dusk = structuredClone(base);
+  dusk.background.bottom = { ...sunset.background.top };
+  dusk.shadowDiagonal.angle = (base.shadowDiagonal.angle + sunset.shadowDiagonal.angle) / 2;
+  dusk.shadowDiagonal.xOriginRatio =
+    (base.shadowDiagonal.xOriginRatio + sunset.shadowDiagonal.xOriginRatio) / 2;
+
+  return [base, dusk, sunset];
+}
+
+// The parts of a theme that blendThemes changes. The rest (animation, interaction,
+// layers, cloud) are the same in every stage
+export const BLENDED_SECTIONS = ["colours", "background", "shadowDiagonal"];
+
+const isColour = (value) =>
+  value && typeof value === "object" && "hue" in value && "sat" in value && "light" in value;
+
+// Blends two values of the same shape. Numbers are mixed, colours are mixed
+// along the shortest way round the colour wheel, objects are mixed part by part,
+// and anything else (a name, a switch) is a's until the half way point and then b's
+function blend(a, b, t) {
+  if (typeof a === "number" && typeof b === "number") return lerp(a, b, t);
+  if (isColour(a) && isColour(b)) return mixColours(a, b, t);
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    const blended = {};
+    for (const key of Object.keys(a)) blended[key] = blend(a[key], b[key], t);
+    return blended;
+  }
+  return t < 0.5 ? a : b;
+}
+
+// A theme t of the way from theme a to theme b
+export function blendThemes(a, b, t) {
+  const blended = { ...a };
+  for (const section of BLENDED_SECTIONS) {
+    blended[section] = blend(withBottom(a[section]), withBottom(b[section]), t);
+  }
+  // Two skies with no bottom colour blend to a sky with no bottom colour
+  if (a.background?.bottom === undefined && b.background?.bottom === undefined) {
+    blended.background.bottom = undefined;
+  }
+  return blended;
+}
+
+// A background with no bottom colour is the same all the way down, so for blending
+// it has a bottom that is the top
+function withBottom(section) {
+  if (!section || !("top" in section)) return section;
+  return { ...section, bottom: section.bottom ?? section.top };
+}
+
+// The theme part of the way through a list of themes: 0 is the first, 1 is the last,
+// and the others are evenly spaced between
+export function themeAtProgress(keyframes, progress) {
+  if (keyframes.length === 1) return keyframes[0];
+
+  const position = Math.min(Math.max(progress, 0), 1) * (keyframes.length - 1);
+  const index = Math.min(Math.floor(position), keyframes.length - 2);
+
+  // Exactly on a theme, it is that theme as it is, with nothing blended in
+  const t = position - index;
+  if (t === 0) return keyframes[index];
+  if (t === 1) return keyframes[index + 1];
+  return blendThemes(keyframes[index], keyframes[index + 1], t);
 }

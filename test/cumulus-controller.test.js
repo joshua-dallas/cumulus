@@ -2,7 +2,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { installFakeAnimationFrame, mockCanvas } from "./helpers.js";
 import { CumulusController } from "../src/lib/cumulus-controller.js";
-import { createTheme, defaultTheme } from "../src/lib/theme.js";
+import { createSunsetKeyframes, createTheme, defaultTheme } from "../src/lib/theme.js";
 
 let frames;
 beforeEach(() => {
@@ -10,6 +10,13 @@ beforeEach(() => {
 });
 
 const config = { width: 400, height: 300, numCells: 8, seed: 323, lineWidth: 1, lineSpacing: 1.5 };
+
+// A theme with the mouse force on. It is off by default: only clicking does anything
+const mouseTheme = () => {
+  const theme = createTheme();
+  theme.interaction.enabled = true;
+  return theme;
+};
 
 // A clock the test controls, so animations can be moved on by an exact time
 let time;
@@ -55,10 +62,13 @@ test("with animate: false the cloud is drawn once, with no loop and no mouse lis
   assert.equal(canvas.listeners.length, 0);
 });
 
-test("when animating, the loop and mouse listeners are running", () => {
-  const { canvas } = create();
+test("when animating, the loop is running, and the mouse is listened to only if it can do something", () => {
+  const plain = create();
   assert.equal(frames.pendingCount(), 1);
-  assert.deepEqual(canvas.listeners.map((l) => l.type).sort(), ["mouseleave", "mousemove"]);
+  assert.equal(plain.canvas.listeners.length, 0); // the mouse force is off, and nothing can be clicked
+
+  const withForce = create({ theme: mouseTheme() });
+  assert.deepEqual(withForce.canvas.listeners.map((l) => l.type).sort(), ["mouseleave", "mousemove"]);
 });
 
 test("the loop pauses when off-screen or the page is hidden, and resumes", () => {
@@ -79,7 +89,8 @@ test("the loop pauses when off-screen or the page is hidden, and resumes", () =>
 });
 
 test("destroy stops the loop and removes the listeners", () => {
-  const { canvas, controller } = create();
+  const { canvas, controller } = create({ theme: mouseTheme() });
+  assert.ok(canvas.listeners.length > 0);
   controller.destroy();
   assert.equal(frames.pendingCount(), 0);
   assert.equal(canvas.listeners.length, 0);
@@ -110,7 +121,7 @@ test("frames only recalculate fills and redraw when something moved", () => {
 });
 
 test("brushing the mouse across the cloud moves its cells, and the loop stops redrawing once they are back", () => {
-  const { canvas, controller } = create();
+  const { canvas, controller } = create({ theme: mouseTheme() });
   let draws = 0;
   const draw = controller.renderer.draw.bind(controller.renderer);
   controller.renderer.draw = () => (draws++, draw());
@@ -137,8 +148,26 @@ test("brushing the mouse across the cloud moves its cells, and the loop stops re
   assert.equal(draws, drawsWhenSettled);
 });
 
+test("by default the mouse does not move the cloud, but clicking it still makes a new one", () => {
+  const { canvas, controller } = create({ regenerateOnClick: true, randomSeed: () => 4242 });
+  const { dome } = controller.builder;
+  const move = canvas.listeners.find((l) => l.type === "mousemove").handler;
+  const before = controller.builder.cells.map((c) => [c.x, c.y]);
+
+  for (let i = 0; i <= 14; i++) {
+    move({ clientX: dome.x - 150 + i * 24, clientY: dome.y - dome.radius / 2 });
+    runFor(16, 16);
+  }
+  assert.deepEqual(controller.builder.cells.map((c) => [c.x, c.y]), before);
+
+  const cell = controller.builder.cells[0];
+  canvas.listeners.find((l) => l.type === "click").handler({ clientX: cell.x, clientY: cell.y });
+  runFor(controller.theme.animation.shrinkDuration + 200);
+  assert.equal(controller.seed, 4242);
+});
+
 test("the mouse does not push the cloud while it is still growing", () => {
-  const { canvas, controller } = create({ growIn: true });
+  const { canvas, controller } = create({ growIn: true, theme: mouseTheme() });
   const move = canvas.listeners.find((l) => l.type === "mousemove").handler;
   const { dome } = controller.builder;
 
@@ -151,7 +180,7 @@ test("the mouse does not push the cloud while it is still growing", () => {
 });
 
 test("the cursor position is tracked, and cleared when the mouse leaves", () => {
-  const { canvas, controller } = create();
+  const { canvas, controller } = create({ theme: mouseTheme() });
   const move = canvas.listeners.find((l) => l.type === "mousemove");
   move.handler({ clientX: 120, clientY: 80 });
   assert.deepEqual(controller.cursor, { x: 120, y: 80 });
@@ -341,4 +370,241 @@ test("the pointer cursor shows over the cloud when it can be clicked", () => {
   assert.equal(canvas.style.cursor, "pointer");
   move({ clientX: 1, clientY: 1 });
   assert.equal(canvas.style.cursor, "");
+});
+
+// ---- sunset ---------------------------------------------------------------------------------
+
+// These tests are about the theme, not the shape of the cloud, so the cloud is a small one:
+// every frame of a change draws it again
+const createSmall = (overrides = {}) => create({ width: 160, height: 100, numCells: 2, ...overrides });
+
+const DAY = createTheme();
+const SUNSET = createSunsetKeyframes(createTheme())[2];
+
+// What the sky and the shadow look like, to compare
+const look = (controller) => ({
+  top: controller.theme.background.top,
+  bottom: controller.theme.background.bottom,
+  angle: controller.theme.shadowDiagonal.angle,
+});
+
+test("by default the sky is the day sky", () => {
+  const { controller } = createSmall();
+  assert.deepEqual(look(controller), { top: DAY.background.top, bottom: undefined, angle: DAY.shadowDiagonal.angle });
+  assert.equal(controller.renderer.backgroundTop, controller.theme.background.top);
+});
+
+test("a cloud made with sunset on starts as a sunset", () => {
+  const { controller } = createSmall({ sunset: true });
+  assert.deepEqual(look(controller).top, SUNSET.background.top);
+  assert.equal(look(controller).angle, SUNSET.shadowDiagonal.angle);
+  // and that is what is drawn
+  assert.equal(controller.renderer.backgroundTop, controller.theme.background.top);
+  assert.equal(controller.renderer.shadowDiagonalAngle, SUNSET.shadowDiagonal.angle);
+});
+
+test("fading to a sunset goes through dusk half way, and ends as a sunset", () => {
+  const { controller } = createSmall({ sunsetDuration: 4000 });
+  controller.setSunset(true);
+
+  runFor(2000);
+  const dusk = look(controller);
+  assert.deepEqual(dusk.top, DAY.background.top); // still a blue sky at the top...
+  assert.deepEqual(dusk.bottom, SUNSET.background.top); // ...and orange at the bottom
+  assert.ok(Math.abs(dusk.angle - (DAY.shadowDiagonal.angle + SUNSET.shadowDiagonal.angle) / 2) < 1e-6); // shadow half way
+
+  runFor(2200);
+  assert.deepEqual(look(controller).top, SUNSET.background.top);
+  assert.equal(look(controller).angle, SUNSET.shadowDiagonal.angle);
+  assert.equal(controller.themeAnimation, null);
+});
+
+test("fading back from the sunset is the same stages in reverse", () => {
+  const { controller } = createSmall({ sunset: true, sunsetDuration: 4000 });
+  controller.setSunset(false);
+
+  runFor(2000);
+  assert.deepEqual(look(controller).top, DAY.background.top);
+  assert.deepEqual(look(controller).bottom, SUNSET.background.top);
+
+  runFor(2200);
+  assert.deepEqual(look(controller).top, DAY.background.top);
+  assert.equal(look(controller).angle, DAY.shadowDiagonal.angle);
+  assert.equal(controller.renderer.backgroundTop, controller.theme.background.top);
+});
+
+test("the sunset can be reversed part way, and goes straight back without passing dusk again", () => {
+  const { controller } = createSmall({ sunsetDuration: 4000 });
+  controller.setSunset(true);
+  runFor(1000);
+  const reached = controller.themeProgress;
+  assert.ok(reached > 0.05 && reached < 0.5);
+
+  controller.setSunset(false);
+  let previous = controller.themeProgress;
+  let frames = 0;
+  while (controller.themeAnimation && frames++ < 200) {
+    runFor(50);
+    assert.ok(controller.themeProgress <= previous + 1e-9, "went forwards again");
+    previous = controller.themeProgress;
+  }
+  assert.equal(controller.themeProgress, 0);
+  assert.equal(look(controller).angle, DAY.shadowDiagonal.angle);
+});
+
+test("a change that is part of the way there takes only part of the time", () => {
+  const { controller } = createSmall({ sunsetDuration: 4000 });
+  controller.setSunset(true);
+  runFor(1000);
+  controller.setSunset(false);
+  assert.ok(controller.themeAnimation.duration < 2000); // not the whole 4000
+  assert.ok(controller.themeAnimation.duration > 0);
+});
+
+test("the sky and shadow are redrawn on every frame of the change, and then the loop is idle again", () => {
+  const { controller } = createSmall({ sunsetDuration: 1000 });
+  let draws = 0;
+  const draw = controller.renderer.draw.bind(controller.renderer);
+  controller.renderer.draw = () => (draws++, draw());
+
+  controller.setSunset(true);
+  runFor(500);
+  assert.ok(draws >= 9);
+  runFor(700);
+  const done = draws;
+  runFor(500);
+  assert.equal(draws, done);
+});
+
+test("transitionTheme fades through any list of themes, in either direction", () => {
+  const { controller } = createSmall();
+  const keyframes = createSunsetKeyframes(createTheme());
+
+  controller.transitionTheme(keyframes, 0, 1, 1000);
+  runFor(1100);
+  assert.equal(controller.themeProgress, 1);
+  assert.equal(look(controller).angle, SUNSET.shadowDiagonal.angle);
+
+  controller.transitionTheme(keyframes, 1, 0, 1000);
+  runFor(1100);
+  assert.equal(controller.themeProgress, 0);
+  assert.equal(look(controller).angle, DAY.shadowDiagonal.angle);
+});
+
+test("the theme object stays the same one, and only the sky and shadow change", () => {
+  const { controller } = createSmall({ sunsetDuration: 1000 });
+  const theme = controller.theme;
+  const { animation, interaction, layers } = theme;
+
+  controller.setSunset(true);
+  runFor(1200);
+  assert.equal(controller.theme, theme);
+  assert.equal(theme.animation, animation);
+  assert.equal(theme.interaction, interaction);
+  assert.equal(theme.layers, layers);
+});
+
+test("without animation the sunset is immediate", () => {
+  const { controller } = createSmall({ animate: false });
+  controller.setSunset(true);
+  assert.equal(controller.themeAnimation, null);
+  assert.equal(look(controller).angle, SUNSET.shadowDiagonal.angle);
+  assert.deepEqual(look(controller).top, SUNSET.background.top);
+  assert.equal(frames.pendingCount(), 0);
+
+  controller.setSunset(false);
+  assert.equal(look(controller).angle, DAY.shadowDiagonal.angle);
+});
+
+test("the sunset carries on when the cloud is replaced by a click", () => {
+  const { canvas, controller } = createSmall({ sunset: true, regenerateOnClick: true, randomSeed: () => 99 });
+  const cell = controller.builder.cells[0];
+  canvas.listeners.find((l) => l.type === "click").handler({ clientX: cell.x, clientY: cell.y });
+  runFor(controller.theme.animation.shrinkDuration + 200);
+  assert.equal(controller.seed, 99);
+  assert.equal(look(controller).angle, SUNSET.shadowDiagonal.angle);
+});
+
+test("the cloud is built with the cloud settings from the theme", () => {
+  const theme = createTheme();
+  theme.cloud.minBaseWidth = 0.5;
+  const { controller } = createSmall({ theme });
+  assert.equal(controller.builder.options, theme.cloud);
+  assert.equal(controller.builder.options.minBaseWidth, 0.5);
+});
+
+test("the shadow edge can be moved for the day and for the sunset", () => {
+  const { controller } = createSmall({ sunsetDuration: 1000 });
+  controller.setShadowDiagonal({ day: { angle: 2, xOriginRatio: 0.4 } });
+  assert.equal(controller.theme.shadowDiagonal.angle, 2);
+  assert.equal(controller.renderer.shadowDiagonalAngle, 2);
+  assert.equal(controller.renderer.shadowDiagonalXOrigin, 0.4 * 160);
+
+  // The sunset shadow does not show in the day, but is where the sunset ends up
+  controller.setShadowDiagonal({ sunset: { angle: 1, xOriginRatio: 0.9 } });
+  assert.equal(controller.theme.shadowDiagonal.angle, 2);
+  controller.setSunset(true);
+  runFor(1200);
+  assert.equal(controller.theme.shadowDiagonal.angle, 1);
+  assert.equal(controller.theme.shadowDiagonal.xOriginRatio, 0.9);
+
+  // and the day is where it goes back to
+  controller.setSunset(false);
+  runFor(1200);
+  assert.equal(controller.theme.shadowDiagonal.angle, 2);
+  assert.equal(controller.theme.shadowDiagonal.xOriginRatio, 0.4);
+});
+
+test("moving the shadow edge in the sunset while it shows is seen at once and redrawn", () => {
+  const { controller } = createSmall({ sunset: true });
+  let draws = 0;
+  const draw = controller.renderer.draw.bind(controller.renderer);
+  controller.renderer.draw = () => (draws++, draw());
+
+  controller.setShadowDiagonal({ sunset: { angle: 1.2 } });
+  assert.equal(controller.renderer.shadowDiagonalAngle, 1.2);
+  assert.equal(draws, 1);
+});
+
+test("the shadow edge can be changed part way through a sunset, which carries on to the new place", () => {
+  const { controller } = createSmall({ sunsetDuration: 1000 });
+  controller.setSunset(true);
+  runFor(300);
+  controller.setShadowDiagonal({ sunset: { angle: 1 } });
+  runFor(1200);
+  assert.equal(controller.theme.shadowDiagonal.angle, 1);
+});
+
+test("the shadow edge can be set when the cloud is made", () => {
+  const { controller } = createSmall({
+    shadowDiagonal: { day: { angle: 2.5 }, sunset: { angle: 1.1 } },
+  });
+  assert.equal(controller.theme.shadowDiagonal.angle, 2.5); // the day
+  assert.equal(controller.sunsetKeyframes[2].shadowDiagonal.angle, 1.1);
+});
+
+test("the canvas is cleared to see-through by default, so the page behind shows in the gaps", () => {
+  const canvas = mockCanvas();
+  const calls = [];
+  const context = canvas.getContext();
+  Object.defineProperty(context, "fillRect", { value: (...args) => calls.push(["fillRect", ...args]) });
+  Object.defineProperty(context, "clearRect", { value: (...args) => calls.push(["clearRect", ...args]) });
+
+  const controller = new CumulusController(canvas, { ...config, width: 160, height: 100, numCells: 2, animate: false });
+  controller.redraw();
+  assert.deepEqual(calls[0], ["clearRect", 0, 0, 160, 100]);
+  assert.ok(calls.every((call) => call[0] === "clearRect"));
+});
+
+test("a paper colour is only used for the gaps in lines: the canvas itself is never filled", () => {
+  const canvas = mockCanvas();
+  const fills = [];
+  const context = canvas.getContext();
+  Object.defineProperty(context, "fillRect", { value: (...args) => fills.push(args) });
+  const theme = createTheme();
+  theme.background.paper = { hue: 0, sat: 0, light: 100 };
+
+  const controller = new CumulusController(canvas, { ...config, width: 160, height: 100, numCells: 2, animate: false, theme });
+  controller.redraw();
+  assert.deepEqual(fills, []);
 });
