@@ -61,6 +61,7 @@ export class CloudBuilder {
     this.matchBottomCell();
     this.centreCells();
     this.addSteppedChildCells();
+    this.centreCells(); // again, now the stepped children are part of the cloud
     this.addExtensionLines();
     this.fillInnerGaps();
     this.createCloudInner();
@@ -434,15 +435,12 @@ export class CloudBuilder {
   }
 
   centreCells() {
-    let centreSum = 0;
-    let totalWeights = 0;
-    for (const cell of this.cells) {
-      centreSum += cell.x * cell.radius ** 2;
-      totalWeights += cell.radius ** 2;
-    }
-    const weightedCentre = Math.round(centreSum / totalWeights);
+    // Centre the left and right extremes of the cells, whatever their sizes
+    const left = Math.min(...this.cells.map((cell) => cell.x - cell.radius));
+    const right = Math.max(...this.cells.map((cell) => cell.x + cell.radius));
+    const middle = Math.round((left + right) / 2);
 
-    const xOffset = this.dome.x - weightedCentre;
+    const xOffset = this.dome.x - middle;
 
     for (const cell of this.cells) {
       cell.x += xOffset;

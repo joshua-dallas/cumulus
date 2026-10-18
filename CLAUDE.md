@@ -50,7 +50,7 @@ attributes / resize / reduced-motion change
 
 1. `generateCells` – `numCells` circles at random polar positions inside a half-disc ("dome") whose radius derives from the canvas size. Radii are fractions (0.1–0.3) of the dome radius.
 2. `matchBottomCell` – adds one cell on the opposite side of the centre line so the base is flat-ish.
-3. `centreCells` – shifts all cells (and their `sim.baseLocation`) so the radius²-weighted centroid sits on the dome centre x.
+3. `centreCells` – shifts all cells (and their `sim.baseLocation`) so the middle between the leftmost and rightmost cell edges sits on the dome centre x (regardless of cell size). It runs a second time after `addSteppedChildCells`, so the children count too (the first run decides which side each cell is on).
 4. `addSteppedChildCells` – each cell has 50% chance of getting 2 smaller children stepping outward, baselines aligned.
 5. `addExtensionLines` – each cell gets `upperExtension`/`lowerExtension`: vertical lines through the cell centre used to build the interior fill.
 6. `fillInnerGaps` – raises `upperExtension` where an outer/upper cell's lower extension would leave a vertical gap.
