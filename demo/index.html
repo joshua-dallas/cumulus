@@ -37,8 +37,8 @@
       <section class="mt-6 rounded-lg bg-white p-4 shadow-xl">
         <h2 class="text-lg font-semibold">Shadow edge</h2>
         <p class="mt-1 text-sm text-slate-500">
-          The angle is measured from the bottom of the canvas (90&deg; is vertical). The offset is how far
-          across the canvas the edge meets the bottom. Day sliders show in the day, sunset sliders when
+          The angle is measured from the base of the cloud (90&deg; is vertical). The offset is how far
+          from the middle of the base, as a percentage of the cloud's radius, the edge meets the base. Day sliders show in the day, sunset sliders when
           the sunset is on.
         </p>
         <div class="mt-4 grid gap-x-10 gap-y-4 sm:grid-cols-2">
@@ -52,13 +52,28 @@
           </label>
           <label class="block text-sm">
             <span class="flex justify-between"><span>Day offset</span><output id="day-offset-value" class="font-mono"></output></span>
-            <input id="day-offset" type="range" min="0" max="100" step="1" class="w-full" />
+            <input id="day-offset" type="range" min="-100" max="100" step="1" class="w-full" />
           </label>
           <label class="block text-sm">
             <span class="flex justify-between"><span>Sunset offset</span><output id="sunset-offset-value" class="font-mono"></output></span>
-            <input id="sunset-offset" type="range" min="0" max="100" step="1" class="w-full" />
+            <input id="sunset-offset" type="range" min="-100" max="100" step="1" class="w-full" />
           </label>
         </div>
+      </section>
+      <section class="mt-6 rounded-lg bg-white p-4 shadow-xl">
+        <h2 class="text-lg font-semibold">Shades and lines</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          Lightness of the three shades (0 is black, 100 is white), then the line width, wave period
+          and wave amplitude of each part of the cloud. The values start at the theme's. Copy the
+          values below to save them.
+        </p>
+        <div id="style-sliders" class="mt-4 space-y-6"></div>
+        <textarea
+          id="style-values"
+          readonly
+          rows="12"
+          class="mt-6 w-full rounded-md bg-slate-100 p-3 font-mono text-xs"
+        ></textarea>
       </section>
     </main>
     <script type="module">
@@ -90,9 +105,78 @@
       const sliders = [
         { id: "day-angle", stage: "day", key: "angle", start: toDegrees(day.angle), unit: "\u00b0", read: (v) => (v * Math.PI) / 180 },
         { id: "sunset-angle", stage: "sunset", key: "angle", start: toDegrees(sunset.angle), unit: "\u00b0", read: (v) => (v * Math.PI) / 180 },
-        { id: "day-offset", stage: "day", key: "xOriginRatio", start: Math.round(day.xOriginRatio * 100), unit: "%", read: (v) => v / 100 },
-        { id: "sunset-offset", stage: "sunset", key: "xOriginRatio", start: Math.round(sunset.xOriginRatio * 100), unit: "%", read: (v) => v / 100 },
+        { id: "day-offset", stage: "day", key: "xOriginOffset", start: Math.round(day.xOriginOffset * 100), unit: "%", read: (v) => v / 100 },
+        { id: "sunset-offset", stage: "sunset", key: "xOriginOffset", start: Math.round(sunset.xOriginOffset * 100), unit: "%", read: (v) => v / 100 },
       ];
+      // Sliders for the shades, and the line widths and waves of each part of the cloud
+      const theme = createTheme();
+      const lightnessSliders = [
+        { label: "Dark 2 (dark fractals, shadow)", colour: "dark2" },
+        { label: "Dark (fills)", colour: "dark" },
+        { label: "Mid (cells)", colour: "mid" },
+        { label: "Light (light fractals)", colour: "light" },
+      ];
+      // Layers that are not set in the theme use the renderer's own values
+      const rendererDefaults = { lineWidth: 1, wavePeriod: 60, waveAmplitude: 0.5 };
+      const parts = [
+        { label: "Cells", layers: ["cell"] },
+        { label: "Dark fractals", layers: ["darkFractal"] },
+        { label: "Light fractals", layers: ["lightFractal"] },
+        { label: "Fills", layers: ["fillCircle", "innerLeft", "innerRight"] },
+      ];
+      const lineSliders = [
+        { label: "Line width", key: "lineWidth", min: 0.3, max: 4, step: 0.1 },
+        { label: "Wave period", key: "wavePeriod", min: 5, max: 150, step: 1 },
+        { label: "Wave amplitude", key: "waveAmplitude", min: 0.1, max: 3, step: 0.1 },
+      ];
+
+      const container = document.getElementById("style-sliders");
+      const output = document.getElementById("style-values");
+      const values = { colours: {}, layers: {} }; // what has been set, to copy out
+
+      const addSlider = (parent, label, start, { min, max, step }, onChange) => {
+        const wrapper = document.createElement("label");
+        wrapper.className = "block text-sm";
+        wrapper.innerHTML = `<span class="flex justify-between"><span>${label}</span><output class="font-mono"></output></span><input type="range" class="w-full" />`;
+        const input = wrapper.querySelector("input");
+        const value = wrapper.querySelector("output");
+        Object.assign(input, { min, max, step, value: start });
+        value.textContent = start;
+        input.addEventListener("input", () => {
+          value.textContent = input.value;
+          onChange(Number(input.value));
+        });
+        parent.append(wrapper);
+      };
+      const addGroup = (title) => {
+        const group = document.createElement("div");
+        group.innerHTML = `<h3 class="font-medium">${title}</h3><div class="mt-2 grid gap-x-10 gap-y-3 sm:grid-cols-3"></div>`;
+        container.append(group);
+        return group.lastElementChild;
+      };
+      const showValues = () => (output.value = JSON.stringify(values, null, 2));
+
+      const shades = addGroup("Shades (lightness)");
+      for (const { label, colour } of lightnessSliders) {
+        addSlider(shades, label, theme.colours[colour].light, { min: 0, max: 100, step: 1 }, (light) => {
+          cloud.setThemeValues({ colours: { [colour]: { light } } });
+          ((values.colours[colour] ??= {}).light = light), showValues();
+        });
+      }
+      for (const { label, layers } of parts) {
+        const group = addGroup(label);
+        for (const { label: name, key, min, max, step } of lineSliders) {
+          const start = theme.layers[layers[0]][key] ?? rendererDefaults[key];
+          addSlider(group, name, start, { min, max, step }, (value) => {
+            const patch = Object.fromEntries(layers.map((layer) => [layer, { [key]: value }]));
+            cloud.setThemeValues({ layers: patch });
+            for (const layer of layers) (values.layers[layer] ??= {})[key] = value;
+            showValues();
+          });
+        }
+      }
+      showValues();
+
       for (const { id, stage, key, start, unit, read } of sliders) {
         const input = document.getElementById(id);
         const value = document.getElementById(`${id}-value`);

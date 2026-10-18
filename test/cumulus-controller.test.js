@@ -535,24 +535,24 @@ test("the cloud is built with the cloud settings from the theme", () => {
 
 test("the shadow edge can be moved for the day and for the sunset", () => {
   const { controller } = createSmall({ sunsetDuration: 1000 });
-  controller.setShadowDiagonal({ day: { angle: 2, xOriginRatio: 0.4 } });
+  controller.setShadowDiagonal({ day: { angle: 2, xOriginOffset: 0.4 } });
   assert.equal(controller.theme.shadowDiagonal.angle, 2);
   assert.equal(controller.renderer.shadowDiagonalAngle, 2);
-  assert.equal(controller.renderer.shadowDiagonalXOrigin, 0.4 * 160);
+  assert.equal(controller.renderer.shadowDiagonalXOrigin, controller.builder.dome.x + 0.4 * controller.builder.dome.radius);
 
   // The sunset shadow does not show in the day, but is where the sunset ends up
-  controller.setShadowDiagonal({ sunset: { angle: 1, xOriginRatio: 0.9 } });
+  controller.setShadowDiagonal({ sunset: { angle: 1, xOriginOffset: 0.9 } });
   assert.equal(controller.theme.shadowDiagonal.angle, 2);
   controller.setSunset(true);
   runFor(1200);
   assert.equal(controller.theme.shadowDiagonal.angle, 1);
-  assert.equal(controller.theme.shadowDiagonal.xOriginRatio, 0.9);
+  assert.equal(controller.theme.shadowDiagonal.xOriginOffset, 0.9);
 
   // and the day is where it goes back to
   controller.setSunset(false);
   runFor(1200);
   assert.equal(controller.theme.shadowDiagonal.angle, 2);
-  assert.equal(controller.theme.shadowDiagonal.xOriginRatio, 0.4);
+  assert.equal(controller.theme.shadowDiagonal.xOriginOffset, 0.4);
 });
 
 test("moving the shadow edge in the sunset while it shows is seen at once and redrawn", () => {
@@ -646,4 +646,25 @@ test("pointer methods drive the cloud without listening to the canvas (as in a w
   controller.randomSeed = () => seed + 1;
   controller.pointerClick(cell.x, cell.y);
   assert.equal(controller.phase, "shrinking");
+});
+
+test("setThemeValues changes layer styles and shades, redraws, and keeps them through a sunset", () => {
+  const { controller } = create({ animate: false });
+  controller.setThemeValues({ colours: { dark: { light: 33 } }, layers: { cell: { lineWidth: 2.5 } } });
+
+  assert.equal(controller.theme.layers.cell.lineWidth, 2.5);
+  assert.equal(controller.theme.layers.cell.waveAmplitude, defaultTheme.layers.cell.waveAmplitude); // others kept
+  assert.equal(controller.theme.colours.dark.light, 33);
+  assert.equal(controller.renderer.layers.find((layer) => layer.key.startsWith("cell-")).lineWidth, 2.5);
+
+  controller.setSunset(true, 1000); // no animation: at once
+  assert.equal(controller.theme.colours.dark.light, 33);
+  assert.equal(controller.theme.layers.cell.lineWidth, 2.5);
+  assert.equal(controller.theme.colours.dark2.light, defaultTheme.colours.dark2.light);
+});
+
+test("themeValues in the config are applied from the start", () => {
+  const { controller } = create({ animate: false, themeValues: { colours: { mid: { light: 61 } } } });
+  assert.equal(controller.theme.colours.mid.light, 61);
+  assert.equal(defaultTheme.colours.mid.light, 66); // the default theme itself is not changed
 });

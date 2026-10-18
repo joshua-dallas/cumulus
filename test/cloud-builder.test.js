@@ -31,7 +31,7 @@ const hashOf = (builder) =>
   createHash("sha1").update(JSON.stringify(snapshot(builder))).digest("hex");
 
 test("seed 323 still builds the same cloud (random call order is stable)", () => {
-  assert.equal(hashOf(build(323)), "8da5f3d0f92627ef5d353ef6dbbc3e98143e9e2c");
+  assert.equal(hashOf(build(323)), "4ce63f88e1fb81ec72355101524075d1d8da4c09");
 });
 
 // The minimum base width moves a cell but does not use or skip any random numbers.
@@ -40,7 +40,7 @@ test("seed 323 still builds the same cloud (random call order is stable)", () =>
 // size, as the dome radius was made to fit the width as well as the height.)
 test("with no minimum base width, seed 323 builds the cloud it should", () => {
   const noMinimum = build(323, 15, 600, 400, { minBaseWidth: 0 });
-  assert.equal(hashOf(noMinimum), "90c2eb77d02503b10b470a35f9def3d46d1daf3d");
+  assert.equal(hashOf(noMinimum), "8e03ad7623b2ac4226bfc6c1d6218f97ddc3a5a0");
 });
 
 test("the dome is small enough for the cloud to fit the canvas across as well as up", () => {

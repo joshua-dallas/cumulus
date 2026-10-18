@@ -7,7 +7,8 @@ import { CumulusController } from "./cumulus-controller.js";
 //
 // Messages in:  init { canvas }, build { config, buildId }, pointermove { x, y },
 //               pointerleave, pointerclick { x, y }, inview { value }, pagevisible { value },
-//               sunset { on, duration }, shadow { settings }
+//               sunset { on, duration }, shadow { settings },
+//               themevalues { values }
 // Messages out: built { buildId, followsMouse }, seedchange { seed }, cursor { cursor }
 
 let canvas = null;
@@ -52,6 +53,9 @@ self.onmessage = ({ data }) => {
       break;
     case "shadow":
       controller?.setShadowDiagonal(data.settings);
+      break;
+    case "themevalues":
+      controller?.setThemeValues(data.values);
       break;
   }
 };

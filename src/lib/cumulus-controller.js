@@ -5,6 +5,7 @@ import {
   BLENDED_SECTIONS,
   createSunsetKeyframes,
   createTheme,
+  mergeThemeValues,
   themeAtProgress,
 } from "./theme.js";
 import { clamp01, easeInOutCubic, easeOutCubic } from "./easing.js";
@@ -20,6 +21,7 @@ const MAX_FRAME_MS = 100;
 //
 // config: { width, height, numCells, seed, lineWidth, lineSpacing,
 //           animate, growIn, regenerateOnClick, sunset, sunsetDuration, shadowDiagonal,
+//           themeValues,
 //           theme, onSeedChange, randomSeed, now, pixelRatio, listenToCanvas, onCursorChange }
 //   animate: false draws the finished cloud once, with no animation loop,
 //            no mouse push and no grow or shrink animation (used for
@@ -30,9 +32,10 @@ const MAX_FRAME_MS = 100;
 //            replaces it immediately
 //   sunset: the sky starts as a sunset. setSunset(on) changes to or from one,
 //            fading over sunsetDuration ms (see transitionTheme)
-//   shadowDiagonal: { day: { angle, xOriginRatio }, sunset: { angle, xOriginRatio } }
+//   shadowDiagonal: { day: { angle, xOriginOffset }, sunset: { angle, xOriginOffset } }
 //            changes where the edge of the shadow is, in the day and in the sunset
 //            (see setShadowDiagonal). Angles are in radians
+//   themeValues: colours and layer styles to change from the theme's (see setThemeValues)
 //   onSeedChange(seed): called when a click gives the cloud a new seed
 //   randomSeed(): picks the seed for a new cloud. now(): the clock, in ms
 //   pixelRatio: device pixels per CSS pixel (read from the window if not given)
@@ -56,7 +59,7 @@ export class CumulusController {
     this.animate = config.animate ?? true;
     this.growIn = this.animate && (config.growIn ?? false);
     this.regenerateOnClick = config.regenerateOnClick ?? false;
-    this.theme = config.theme ?? createTheme();
+    this.theme = mergeThemeValues(config.theme ?? createTheme(), config.themeValues);
 
     // The sunset is a path through themes: the day, a dusk with a blue sky orange at
     // the bottom, and the sunset. The first is a copy of the day theme, as this.theme
@@ -82,6 +85,7 @@ export class CumulusController {
       config.lineSpacing,
       config.pixelRatio,
     );
+    this.renderer.setDome(this.builder.dome); // the shadow is measured from it
     this.renderer.applyTheme(this.theme);
     this.renderer.finaliseRenderer();
 
@@ -290,7 +294,7 @@ export class CumulusController {
   }
 
   // Changes where the edge of the shadow is, for the day and for the sunset:
-  //   { day: { angle, xOriginRatio }, sunset: { angle, xOriginRatio } }
+  //   { day: { angle, xOriginOffset }, sunset: { angle, xOriginOffset } }
   // Anything left out is not changed. The angle is in radians, from the bottom
   // of the canvas; the ratio is how far across the canvas (0 to 1) the edge meets it
   setShadowDiagonal(settings) {
@@ -299,15 +303,26 @@ export class CumulusController {
     this.redraw();
   }
 
+  // Changes colours and layer styles of the theme, as in mergeThemeValues:
+  //   { colours: { dark: { light: 40 } }, layers: { cell: { lineWidth: 1.5 } } }
+  // Colours are part of the day (the first stage), so that they last through a sunset
+  setThemeValues(values) {
+    mergeThemeValues(this.sunsetKeyframes[0], values);
+    mergeThemeValues(this.theme, { layers: values.layers });
+    this.setShadowSettings();
+    this.applyThemeProgress(this.sunsetKeyframes, this.themeProgress);
+    this.redraw();
+  }
+
   setShadowSettings({ day = {}, sunset = {} } = {}) {
     const oldKeyframes = this.sunsetKeyframes;
 
     // The day is the first of the stages, a copy of the theme. The sunset is made from it
-    for (const key of ["angle", "xOriginRatio"]) {
+    for (const key of ["angle", "xOriginOffset"]) {
       if (day[key] !== undefined) oldKeyframes[0].shadowDiagonal[key] = day[key];
     }
     if (sunset.angle !== undefined) this.sunsetOptions.shadowAngle = sunset.angle;
-    if (sunset.xOriginRatio !== undefined) this.sunsetOptions.shadowXOriginRatio = sunset.xOriginRatio;
+    if (sunset.xOriginOffset !== undefined) this.sunsetOptions.shadowXOriginOffset = sunset.xOriginOffset;
 
     this.sunsetKeyframes = createSunsetKeyframes(oldKeyframes[0], this.sunsetOptions);
     if (this.themeAnimation?.keyframes === oldKeyframes) {

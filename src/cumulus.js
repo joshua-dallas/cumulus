@@ -1,3 +1,4 @@
+import { mergeThemeValues } from "./lib/theme.js";
 import { MainThreadHost, WorkerHost, workersCanDraw } from "./lib/cumulus-host.js";
 
 const DEFAULTS = {
@@ -26,8 +27,11 @@ const RESIZE_DEBOUNCE_MS = 150;
 //   sunset             the sky is a sunset. Adding or removing the attribute fades
 //                      to or from one, over sunsetDuration ms (default 6000)
 //
-// setShadowDiagonal({ day: { angle, xOriginRatio }, sunset: { ... } }) moves the edge
+// setShadowDiagonal({ day: { angle, xOriginOffset }, sunset: { ... } }) moves the edge
 // of the shadow, in radians, for the day and for the sunset.
+//
+// setThemeValues({ colours: { dark: { light } }, layers: { cell: { lineWidth } } }) changes
+// the shades and the line widths, wave periods and wave amplitudes of the layers.
 //
 // The seed of the cloud on show is the property `currentSeed`. When a click gives
 // the cloud a new seed, the element fires a `seedchange` event with { seed } in
@@ -61,6 +65,7 @@ export class Cumulus extends HTMLElement {
     this.hasBuilt = false; // Grow-in only plays the first time
     this.seedOverride = null; // The seed of a cloud made by clicking, kept across rebuilds
     this.shadowSettings = { day: {}, sunset: {} }; // Set with setShadowDiagonal, kept across rebuilds
+    this.themeValues = {}; // Set with setThemeValues, kept across rebuilds
     this.rebuildTimer = null;
     this.inView = true;
     this.reducedMotionQuery = window.matchMedia(
@@ -190,6 +195,7 @@ export class Cumulus extends HTMLElement {
       sunset: this.booleanAttribute("sunset"),
       sunsetDuration: this.sunsetDuration(),
       shadowDiagonal: structuredClone(this.shadowSettings),
+      themeValues: structuredClone(this.themeValues),
       onSeedChange: (seed) => {
         this.seedOverride = seed;
         this.dispatchEvent(
@@ -203,6 +209,13 @@ export class Cumulus extends HTMLElement {
     Object.assign(this.shadowSettings.day, day);
     Object.assign(this.shadowSettings.sunset, sunset);
     this.host?.setShadowDiagonal({ day, sunset });
+  }
+
+  // Changes colours and layer styles of the theme, for example
+  //   { colours: { dark: { light: 40 } }, layers: { cell: { lineWidth: 1.5 } } }
+  setThemeValues(values) {
+    mergeThemeValues(this.themeValues, structuredClone(values));
+    this.host?.setThemeValues(values);
   }
 
   // The seed of the cloud on show

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   BLENDED_SECTIONS,
   SUNSET_SHADOW_ANGLE,
-  SUNSET_SHADOW_X_ORIGIN_RATIO,
+  SUNSET_SHADOW_X_ORIGIN_OFFSET,
   blendThemes,
   createSunsetKeyframes,
   createSunsetTheme,
@@ -30,11 +30,11 @@ test("the sky can be given a top colour and a bottom colour; with only a top it 
 test("the shadow edge is at the chosen place in the day and in the sunset", () => {
   const { shadowDiagonal } = createTheme();
   assert.equal(Math.round((shadowDiagonal.angle * 180) / Math.PI), 151);
-  assert.equal(shadowDiagonal.xOriginRatio, 0.75);
+  assert.equal(shadowDiagonal.xOriginOffset, -0.2375);
 
   const sunset = createSunsetTheme().shadowDiagonal;
   assert.equal(Math.round((sunset.angle * 180) / Math.PI), 111);
-  assert.equal(sunset.xOriginRatio, 0.64);
+  assert.equal(sunset.xOriginOffset, 0.231);
 });
 
 test("the sunset theme is a copy of the theme with only a few things changed", () => {
@@ -49,7 +49,7 @@ test("the sunset theme is a copy of the theme with only a few things changed", (
   assert.ok(sunset.background.top.hue < 40); // orange
   assert.equal(sunset.background.bottom, undefined); // all orange
   assert.equal(sunset.shadowDiagonal.angle, SUNSET_SHADOW_ANGLE);
-  assert.equal(sunset.shadowDiagonal.xOriginRatio, SUNSET_SHADOW_X_ORIGIN_RATIO);
+  assert.equal(sunset.shadowDiagonal.xOriginOffset, SUNSET_SHADOW_X_ORIGIN_OFFSET);
   assert.deepEqual(base, createTheme()); // and the theme it was copied from is not changed
 });
 
@@ -128,15 +128,15 @@ test("on the way to the sunset the shadow only rises and the sky only gets close
 
 test("the sunset shadow can be put somewhere else, and dusk is half way between", () => {
   const base = createTheme();
-  const [day, dusk, sunset] = createSunsetKeyframes(base, { shadowAngle: 1, shadowXOriginRatio: 0.9 });
+  const [day, dusk, sunset] = createSunsetKeyframes(base, { shadowAngle: 1, shadowXOriginOffset: 0.9 });
 
   assert.equal(sunset.shadowDiagonal.angle, 1);
-  assert.equal(sunset.shadowDiagonal.xOriginRatio, 0.9);
+  assert.equal(sunset.shadowDiagonal.xOriginOffset, 0.9);
   assert.equal(dusk.shadowDiagonal.angle, (day.shadowDiagonal.angle + 1) / 2);
-  assert.equal(dusk.shadowDiagonal.xOriginRatio, (day.shadowDiagonal.xOriginRatio + 0.9) / 2);
+  assert.equal(dusk.shadowDiagonal.xOriginOffset, (day.shadowDiagonal.xOriginOffset + 0.9) / 2);
 
   // Not given, the sunset shadow is where the sunset has it
-  assert.equal(createSunsetTheme(base).shadowDiagonal.xOriginRatio, SUNSET_SHADOW_X_ORIGIN_RATIO);
+  assert.equal(createSunsetTheme(base).shadowDiagonal.xOriginOffset, SUNSET_SHADOW_X_ORIGIN_OFFSET);
 });
 
 test("the paper is white, and the same all through the sunset; with no paper there is none", () => {

@@ -18,9 +18,9 @@ import { lerp, mixColours } from "./utils.js";
 
 export const defaultTheme = {
   colours: {
-    light: { hue: 0, sat: 0, light: 100 },
-    mid: { hue: 0, sat: 0, light: 75 },
-    dark: { hue: 0, sat: 0, light: 50 },
+    light: { hue: 0, sat: 0, light: 78 },
+    mid: { hue: 0, sat: 0, light: 66 },
+    dark: { hue: 0, sat: 0, light: 46 },
     dark2: { hue: 0, sat: 0, light: 15 },
   },
 
@@ -49,7 +49,9 @@ export const defaultTheme = {
     enabled: true,
     direction: "left", // The shadow is on the left of the diagonal
     angle: (151 * Math.PI) / 180, // From the bottom x-axis
-    xOriginRatio: 0.75, // Where the diagonal meets the bottom of the canvas, as a ratio of the width
+    // Where the diagonal meets the base of the dome (the flat bottom of the cloud): how far
+    // along the base from the dome's centre, in dome radii (negative is to the left)
+    xOriginOffset: -0.2375,
     edgeNoise: 30,
   },
 
@@ -114,7 +116,7 @@ export const defaultTheme = {
 
   layers: {
     cell: {
-      fill: "dark2",
+      fill: "mid",
       rightEdgeNoise: 4,
       leftEdgeNoise: 7,
       rightPadding: 3, // TODO: Try without
@@ -124,18 +126,18 @@ export const defaultTheme = {
       wavePeriod: 30,
     },
     darkFractal: {
-      fill: "dark",
+      fill: "dark2",
       rightEdgeNoise: 2,
       leftEdgeNoise: 4,
       rightPadding: 0,
       leftPadding: 0,
-      lineWidth: 1.4,
-      waveAmplitude: 0.7,
+      lineWidth: 0.9,
+      waveAmplitude: 0.8,
       wavePeriod: 30,
     },
     // rightPadding is set per fractal by the cloud builder
     lightFractal: {
-      fill: "mid",
+      fill: "light",
       rightEdgeNoise: 4,
       leftEdgeNoise: 4,
       leftPadding: 0,
@@ -171,6 +173,21 @@ export const defaultTheme = {
   },
 };
 
+// Writes values into a theme (or a stage of a sunset), keeping everything else:
+//   { colours: { dark: { light: 40 } }, layers: { cell: { lineWidth: 1.5 } } }
+// Objects are merged level by level, anything else is replaced
+export function mergeThemeValues(theme, values = {}) {
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined) continue;
+    if (value && typeof value === "object" && theme[key] && typeof theme[key] === "object") {
+      mergeThemeValues(theme[key], value);
+    } else {
+      theme[key] = value;
+    }
+  }
+  return theme;
+}
+
 export function createTheme() {
   return structuredClone(defaultTheme);
 }
@@ -184,19 +201,19 @@ export function createTheme() {
 // purple and pink, as in a real sunset, and not through green
 const SUNSET_SKY = { hue: 20, sat: 90, light: 62 };
 export const SUNSET_SHADOW_ANGLE = (111 * Math.PI) / 180; // From the bottom x-axis
-export const SUNSET_SHADOW_X_ORIGIN_RATIO = 0.64;
+export const SUNSET_SHADOW_X_ORIGIN_OFFSET = 0.231;
 
 // The sunset theme: a copy of the theme with only a few things changed
-//   shadowAngle, shadowXOriginRatio: where the shadow edge is in the sunset
+//   shadowAngle, shadowXOriginOffset: where the shadow edge is in the sunset
 export function createSunsetTheme(
   base = createTheme(),
-  { shadowAngle = SUNSET_SHADOW_ANGLE, shadowXOriginRatio = SUNSET_SHADOW_X_ORIGIN_RATIO } = {},
+  { shadowAngle = SUNSET_SHADOW_ANGLE, shadowXOriginOffset = SUNSET_SHADOW_X_ORIGIN_OFFSET } = {},
 ) {
   const sunset = structuredClone(base);
   sunset.background.top = { ...SUNSET_SKY };
   sunset.background.bottom = undefined; // all orange
   sunset.shadowDiagonal.angle = shadowAngle;
-  sunset.shadowDiagonal.xOriginRatio = shadowXOriginRatio;
+  sunset.shadowDiagonal.xOriginOffset = shadowXOriginOffset;
   return sunset;
 }
 
@@ -212,8 +229,8 @@ export function createSunsetKeyframes(base = createTheme(), sunsetOptions = {}) 
   const dusk = structuredClone(base);
   dusk.background.bottom = { ...sunset.background.top };
   dusk.shadowDiagonal.angle = (base.shadowDiagonal.angle + sunset.shadowDiagonal.angle) / 2;
-  dusk.shadowDiagonal.xOriginRatio =
-    (base.shadowDiagonal.xOriginRatio + sunset.shadowDiagonal.xOriginRatio) / 2;
+  dusk.shadowDiagonal.xOriginOffset =
+    (base.shadowDiagonal.xOriginOffset + sunset.shadowDiagonal.xOriginOffset) / 2;
 
   return [base, dusk, sunset];
 }

@@ -24,7 +24,13 @@ export class CloudBuilder {
   // options is the cloud part of a theme (see theme.js):
   //   minBaseWidth: the least distance between the middles of the two cells at the
   //   base of the cloud, as a multiple of the dome radius. 0 is no minimum
-  constructor(width = 500, height = 500, numCells = 10, seed = 42, options = defaultTheme.cloud) {
+  constructor(
+    width = 500,
+    height = 500,
+    numCells = 10,
+    seed = 42,
+    options = defaultTheme.cloud,
+  ) {
     this.options = options;
     this.random = mulberry32(seed);
     this.width = width;
@@ -142,7 +148,10 @@ export class CloudBuilder {
     const baseWidth = Math.abs(x - lowestCell.x);
     if (baseWidth < minBaseWidth) {
       const offset = minBaseWidth - Math.abs(lowestCell.x - this.dome.x);
-      x = side > 0 ? Math.ceil(this.dome.x + offset) : Math.floor(this.dome.x - offset);
+      x =
+        side > 0
+          ? Math.ceil(this.dome.x + offset)
+          : Math.floor(this.dome.x - offset);
       x = clamp(x, radius, Math.max(radius, this.width - radius)); // but not out of the canvas
     }
 
@@ -485,7 +494,7 @@ export class CloudBuilder {
     // TODO: Better naming
     // TODO: Move constants elsewhere
     const numberOfFractals = 15; // TODO: Should this be dependant on cell radius?
-    const probOfDarkFractals = 0.6; // Not every cell will have dark fractals
+    const probOfDarkFractals = 0.4; // Not every cell will have dark fractals
 
     if (this.random() > probOfDarkFractals) return [];
 
@@ -547,8 +556,8 @@ export class CloudBuilder {
   }
 
   generateDarkFractalCircle(cell) {
-    const minRadiusRatio = 0.2; // Ratio of fractal radius to cell radius
-    const maxRadiusRatio = 0.3;
+    const minRadiusRatio = 0.15; // Ratio of fractal radius to cell radius
+    const maxRadiusRatio = 0.25;
     const minDist = 0.5; // Fraction of cell radius
 
     const angle = ((this.random() * 2) / 3) * Math.PI + Math.PI * (2 / 3); // TODO: Tailor these angles

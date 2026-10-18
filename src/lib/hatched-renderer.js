@@ -71,6 +71,9 @@ export class HatchedRenderer {
     // Shadow diagonal variables
     // TODO: Create setters
     this.hasShadowDiagonal = true;
+    // The shadow edge passes through the base of the dome, at this x. The dome is set by
+    // setDome(); until then it is the whole width of the canvas, resting on the bottom
+    this.dome = { x: this.width / 2, y: this.height, radius: this.width / 2 };
     this.shadowDiagonalXOrigin = this.width * 0.7;
     this.shadowDiagonalDirection = "left"; // Shadow to the left side
     this.shadowDiagonalAngle = (5 * Math.PI) / 6;
@@ -124,6 +127,12 @@ export class HatchedRenderer {
     }
   }
 
+  // The dome (see CloudBuilder) the shadow edge is measured from: { x, y, radius }, with
+  // y the base of the dome. Call before applyTheme()
+  setDome(dome) {
+    this.dome = dome;
+  }
+
   // Applies the renderer-related parts of a theme (see theme.js).
   // Must be called before finaliseRenderer(), as the noise depends on these values
   applyTheme(theme) {
@@ -144,7 +153,7 @@ export class HatchedRenderer {
 
     const shadow = theme.shadowDiagonal;
     this.hasShadowDiagonal = shadow.enabled;
-    this.shadowDiagonalXOrigin = this.width * shadow.xOriginRatio;
+    this.shadowDiagonalXOrigin = this.dome.x + this.dome.radius * shadow.xOriginOffset;
     this.shadowDiagonalDirection = shadow.direction;
     this.shadowDiagonalAngle = shadow.angle;
 
@@ -682,11 +691,11 @@ export class HatchedRenderer {
 
   getShadowCrossingForLine(line) {
     const y = line.y;
-    // Remember: Positive y is down, but we have specified the angle from the bottom x-axis
-    const maxY = this.height;
-    const yFromBottom = maxY - y;
+    // Remember: Positive y is down, but we have specified the angle from the x-axis
+    // along the base of the dome
+    const yFromBase = this.dome.y - y;
     let shadowX =
-      yFromBottom / Math.tan(this.shadowDiagonalAngle) +
+      yFromBase / Math.tan(this.shadowDiagonalAngle) +
       this.shadowDiagonalXOrigin;
 
     // Apply the shadow diagonal edge noise for this line

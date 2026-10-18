@@ -4,7 +4,7 @@ import { CumulusController } from "./cumulus-controller.js";
 // is built, simulated and drawn off the main thread, onto a transferred OffscreenCanvas)
 // or, where workers cannot draw to a canvas, the main thread. Both have the same methods:
 //   build(config)                   replaces the cloud (config as for CumulusController)
-//   setInView(), setPageVisible(), setSunset(on, duration), setShadowDiagonal(settings)
+//   setInView(), setPageVisible(), setSunset(on, duration), setShadowDiagonal(settings), setThemeValues(values)
 //   seed                            the seed of the cloud on show
 //   destroy()
 // config.onSeedChange is called on the main thread either way.
@@ -46,6 +46,10 @@ export class MainThreadHost {
 
   setShadowDiagonal(settings) {
     this.controller?.setShadowDiagonal(settings);
+  }
+
+  setThemeValues(values) {
+    this.controller?.setThemeValues(values);
   }
 
   destroy() {
@@ -145,6 +149,10 @@ export class WorkerHost {
 
   setShadowDiagonal(settings) {
     this.worker.postMessage({ type: "shadow", settings });
+  }
+
+  setThemeValues(values) {
+    this.worker.postMessage({ type: "themevalues", values });
   }
 
   destroy() {
