@@ -663,6 +663,22 @@ test("setThemeValues changes layer styles and shades, redraws, and keeps them th
   assert.equal(controller.theme.colours.dark2.light, defaultTheme.colours.dark2.light);
 });
 
+test("paddingScale multiplies a layer's padding, including the light fractals' own padding", () => {
+  const { controller } = create({ animate: false });
+  const layer = (key) => controller.renderer.layers.find((l) => l.key === key);
+  const cell = controller.builder.cells.find((c) => c.lightFractals.some((f) => f.rightPadding > 0));
+  const i = cell.lightFractals.findIndex((f) => f.rightPadding > 0);
+  const fractalKey = `light-fractal-${cell.id}-${i}`;
+
+  assert.equal(layer(`cell-${cell.id}`).rightPadding, defaultTheme.layers.cell.rightPadding);
+  assert.equal(layer(fractalKey).rightPadding, cell.lightFractals[i].rightPadding);
+
+  controller.setThemeValues({ layers: { cell: { paddingScale: 0.5 }, lightFractal: { paddingScale: 0.25 } } });
+  assert.equal(layer(`cell-${cell.id}`).rightPadding, defaultTheme.layers.cell.rightPadding * 0.5);
+  assert.equal(layer(fractalKey).rightPadding, cell.lightFractals[i].rightPadding * 0.25);
+  assert.equal(controller.theme.layers.cell.rightPadding, defaultTheme.layers.cell.rightPadding); // theme unchanged
+});
+
 test("themeValues in the config are applied from the start", () => {
   const { controller } = create({ animate: false, themeValues: { colours: { mid: { light: 61 } } } });
   assert.equal(controller.theme.colours.mid.light, 61);

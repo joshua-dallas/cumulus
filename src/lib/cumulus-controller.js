@@ -469,11 +469,19 @@ export class CumulusController {
   }
 
   // Layer styles in the theme refer to colours by name. Resolve them each frame
-  // so that colours changed at runtime (e.g. a sunset) are picked up
+  // so that colours changed at runtime (e.g. a sunset) are picked up.
+  // Padding is multiplied by the layer's paddingScale here
   resolveLayerStyles() {
     const styles = {};
     for (const [name, style] of Object.entries(this.theme.layers)) {
-      styles[name] = { ...style, fill: this.theme.colours[style.fill] };
+      const paddingScale = style.paddingScale ?? 1;
+      styles[name] = {
+        ...style,
+        fill: this.theme.colours[style.fill],
+        paddingScale,
+        leftPadding: (style.leftPadding ?? 0) * paddingScale,
+        rightPadding: (style.rightPadding ?? 0) * paddingScale,
+      };
     }
     return styles;
   }
@@ -542,7 +550,7 @@ export class CumulusController {
         x: x + fractal.x * fractalScale,
         y: y + fractal.y * fractalScale,
         radius: fractal.radius * fractalScale,
-        rightPadding: fractal.rightPadding * fractalScale,
+        rightPadding: fractal.rightPadding * fractalStyles.lightFractal.paddingScale * fractalScale,
         specialType: "light-fractal",
       });
     });

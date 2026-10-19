@@ -33,7 +33,9 @@ export class HatchedRenderer {
   static WAVE_X_NOISE_RANGE = 8;
   static LINE_Y_NOISE_RANGE = 0.4;
   static LINE_WIDTH_NOISE_RANGE = 0.7; // The scale of the line width noise
-  static LINE_WIDTH_NOISE_NODES = 20; // Perlin nodes along a line: more means faster wandering
+  // Perlin nodes along a line, picked per line in this range: more means faster wandering
+  static LINE_WIDTH_NOISE_NODES_MIN = 10;
+  static LINE_WIDTH_NOISE_NODES_MAX = 20;
 
   // width and height are the logical (CSS pixel) size of the drawing area.
   // They are passed in, rather than measured from the canvas, so the renderer
@@ -217,17 +219,16 @@ export class HatchedRenderer {
       ),
     );
     // The width of the line wanders smoothly, like a pen, as Perlin noise.
+    // Each line has its own number of nodes, so some lines wander faster than others.
     // It has its own random stream so that the other noise does not change if
     // the number of nodes is changed
     const widthRandom = mulberry32(this.seed + 1);
-    this.noise.lineWidth = this.lines.map(() =>
-      perlinNoise1D(
-        widthRandom,
-        numXSteps,
-        HatchedRenderer.LINE_WIDTH_NOISE_NODES,
-        HatchedRenderer.LINE_WIDTH_NOISE_RANGE,
-      ),
-    );
+    const { LINE_WIDTH_NOISE_NODES_MIN: minNodes, LINE_WIDTH_NOISE_NODES_MAX: maxNodes } =
+      HatchedRenderer;
+    this.noise.lineWidth = this.lines.map(() => {
+      const nodes = minNodes + Math.floor(widthRandom() * (maxNodes - minNodes + 1));
+      return perlinNoise1D(widthRandom, numXSteps, nodes, HatchedRenderer.LINE_WIDTH_NOISE_RANGE);
+    });
     // Uniform random variable per draw step
     this.noise.lightness = this.lines.map(() =>
       [...Array(numXSteps).keys()].map(() =>

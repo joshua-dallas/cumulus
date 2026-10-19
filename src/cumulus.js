@@ -33,6 +33,8 @@ const RESIZE_DEBOUNCE_MS = 150;
 //
 // setThemeValues({ colours: { dark: { light } }, layers: { cell: { lineWidth } } }) changes
 // the shades and the line widths, wave periods and wave amplitudes of the layers.
+// Only the values passed are changed. A layer's paddingScale multiplies its padding:
+//   setThemeValues({ layers: { cell: { paddingScale: 0.5 }, lightFractal: { paddingScale: 0.5 } } })
 //
 // The seed of the cloud on show is the property `currentSeed`. When a click gives
 // the cloud a new seed, the element fires a `seedchange` event with { seed } in

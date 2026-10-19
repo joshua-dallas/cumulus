@@ -181,14 +181,16 @@ test("line width noise is smooth Perlin noise within the noise range", () => {
 
 test("changing the number of Perlin nodes does not change the other noise", () => {
   const noiseWith = (nodes) => {
-    const original = HatchedRenderer.LINE_WIDTH_NOISE_NODES;
-    HatchedRenderer.LINE_WIDTH_NOISE_NODES = nodes;
+    const { LINE_WIDTH_NOISE_NODES_MIN: min, LINE_WIDTH_NOISE_NODES_MAX: max } = HatchedRenderer;
+    HatchedRenderer.LINE_WIDTH_NOISE_NODES_MIN = nodes;
+    HatchedRenderer.LINE_WIDTH_NOISE_NODES_MAX = nodes;
     try {
       const { renderer } = setup();
       renderer.initialiseNoise();
       return renderer.noise;
     } finally {
-      HatchedRenderer.LINE_WIDTH_NOISE_NODES = original;
+      HatchedRenderer.LINE_WIDTH_NOISE_NODES_MIN = min;
+      HatchedRenderer.LINE_WIDTH_NOISE_NODES_MAX = max;
     }
   };
 

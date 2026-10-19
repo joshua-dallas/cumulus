@@ -11,6 +11,8 @@
 // - interaction: how the mouse moves the cloud.
 // - layers: the style of each kind of shape. Noise values are "plus or minus
 //   this many pixels"; padding shifts the edge of the neighbouring segment.
+//   paddingScale (default 1) multiplies a layer's padding, including the
+//   per-fractal padding of the light fractals (e.g. less padding on a small screen).
 //
 // Use createTheme() to get a copy that is safe to modify.
 
@@ -121,6 +123,7 @@ export const defaultTheme = {
   layers: {
     cell: {
       fill: "mid",
+      paddingScale: 1,
       rightEdgeNoise: 4,
       leftEdgeNoise: 7,
       rightPadding: 3, // TODO: Try without
@@ -131,6 +134,7 @@ export const defaultTheme = {
     },
     darkFractal: {
       fill: "dark2",
+      paddingScale: 1,
       rightEdgeNoise: 2,
       leftEdgeNoise: 4,
       rightPadding: 0,
@@ -142,6 +146,7 @@ export const defaultTheme = {
     // rightPadding is set per fractal by the cloud builder
     lightFractal: {
       fill: "light",
+      paddingScale: 1,
       rightEdgeNoise: 4,
       leftEdgeNoise: 4,
       leftPadding: 0,
@@ -151,6 +156,7 @@ export const defaultTheme = {
     // Used for both the centre line fill circles and the horizontal fill circles
     fillCircle: {
       fill: "dark",
+      paddingScale: 1,
       lineWidth: 1.3,
       rightEdgeNoise: 6,
       leftEdgeNoise: 6,
@@ -160,6 +166,7 @@ export const defaultTheme = {
     // TODO: Top and bottom noise for the inner fills
     innerRight: {
       fill: "dark",
+      paddingScale: 1,
       lineWidth: 1.3,
       rightEdgeNoise: 5,
       leftEdgeNoise: 0,
@@ -168,6 +175,7 @@ export const defaultTheme = {
     },
     innerLeft: {
       fill: "dark",
+      paddingScale: 1,
       lineWidth: 1.3,
       rightEdgeNoise: 0,
       leftEdgeNoise: 5,
