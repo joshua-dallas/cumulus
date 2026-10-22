@@ -11,10 +11,10 @@ beforeEach(() => {
 
 const config = { width: 400, height: 300, numCells: 8, seed: 323, lineWidth: 1, lineSpacing: 1.5 };
 
-// A theme with the mouse force on. It is off by default: only clicking does anything
+// A theme with the mouse push on. It is off by default: only clicking does anything
 const mouseTheme = () => {
   const theme = createTheme();
-  theme.interaction.enabled = true;
+  theme.interaction.repel = true;
   return theme;
 };
 
@@ -65,10 +65,10 @@ test("with animate: false the cloud is drawn once, with no loop and no mouse lis
 test("when animating, the loop is running, and the mouse is listened to only if it can do something", () => {
   const plain = create();
   assert.equal(frames.pendingCount(), 1);
-  assert.equal(plain.canvas.listeners.length, 0); // the mouse force is off, and nothing can be clicked
+  assert.equal(plain.canvas.listeners.length, 0); // the mouse push is off, and nothing can be clicked
 
-  const withForce = create({ theme: mouseTheme() });
-  assert.deepEqual(withForce.canvas.listeners.map((l) => l.type).sort(), ["mouseleave", "mousemove"]);
+  const withRepel = create({ theme: mouseTheme() });
+  assert.deepEqual(withRepel.canvas.listeners.map((l) => l.type).sort(), ["mouseleave", "mousemove"]);
 });
 
 test("the loop pauses when off-screen or the page is hidden, and resumes", () => {
@@ -120,7 +120,7 @@ test("frames only recalculate fills and redraw when something moved", () => {
   assert.deepEqual([fillUpdates, draws], [1, 1]);
 });
 
-test("brushing the mouse across the cloud moves its cells, and the loop stops redrawing once they are back", () => {
+test("putting the mouse on the cloud moves its cells, and the loop stops redrawing once they are back", () => {
   const { canvas, controller } = create({ theme: mouseTheme() });
   let draws = 0;
   const draw = controller.renderer.draw.bind(controller.renderer);
@@ -128,21 +128,16 @@ test("brushing the mouse across the cloud moves its cells, and the loop stops re
   const move = canvas.listeners.find((l) => l.type === "mousemove").handler;
   const leave = canvas.listeners.find((l) => l.type === "mouseleave").handler;
 
-  // A stroke right across the cloud, about 1500px/s
-  const { dome } = controller.builder;
-  for (let i = 0; i <= 14; i++) {
-    move({ clientX: dome.x - 150 + i * 24, clientY: dome.y - dome.radius / 2 });
-    runFor(16, 16);
-  }
-  leave();
+  const cell = controller.builder.cells[0];
+  move({ clientX: cell.x - 5, clientY: cell.y });
+  runFor(500, 16);
   assert.ok(draws > 0);
-  const moved = controller.builder.cells.some((c) => c.x !== c.sim.baseLocation.x);
-  assert.ok(moved);
+  assert.ok(controller.builder.cells.some((c) => c.x !== c.sim.baseLocation.x));
 
-  // The cells settle, and from then on nothing is redrawn
-  for (let i = 0; i < 400 && !controller.simulation.isSettled(); i++) runFor(100);
-  assert.ok(controller.simulation.isSettled());
-  runFor(100);
+  // The cells return, and from then on nothing is redrawn
+  leave();
+  runFor(5000, 16);
+  assert.ok(controller.builder.cells.every((c) => c.x === c.sim.baseLocation.x));
   const drawsWhenSettled = draws;
   runFor(500);
   assert.equal(draws, drawsWhenSettled);

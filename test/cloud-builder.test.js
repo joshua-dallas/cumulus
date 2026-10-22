@@ -27,11 +27,13 @@ test("different seeds build different clouds", () => {
 // how clouds are generated, every existing seed now gives a different cloud:
 // update the hash on purpose. If you did not mean to change clouds, you have
 // added, removed or reordered a this.random() call in CloudBuilder.
+// (The hashes were last changed on purpose when the unused random draws for the fractal
+// animation were removed: every seed then made a different cloud.)
 const hashOf = (builder) =>
   createHash("sha1").update(JSON.stringify(snapshot(builder))).digest("hex");
 
 test("seed 323 still builds the same cloud (random call order is stable)", () => {
-  assert.equal(hashOf(build(323)), "4ce63f88e1fb81ec72355101524075d1d8da4c09");
+  assert.equal(hashOf(build(323)), "f5c6aa688cab25a951a70eca7381197afa6c72df");
 });
 
 // The minimum base width moves a cell but does not use or skip any random numbers.
@@ -40,7 +42,7 @@ test("seed 323 still builds the same cloud (random call order is stable)", () =>
 // size, as the dome radius was made to fit the width as well as the height.)
 test("with no minimum base width, seed 323 builds the cloud it should", () => {
   const noMinimum = build(323, 15, 600, 400, { minBaseWidth: 0 });
-  assert.equal(hashOf(noMinimum), "8e03ad7623b2ac4226bfc6c1d6218f97ddc3a5a0");
+  assert.equal(hashOf(noMinimum), "7749ef45c954e0ff6edcf1fd1c31276b0d80adc0");
 });
 
 test("the dome is small enough for the cloud to fit the canvas across as well as up", () => {

@@ -11,7 +11,8 @@ Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`
 ## Commands
 
 - `npm run dev` – Vite dev server; open `/demo/` (demo imports `../src/define.js`).
-- `npm run build` – library build to `dist/` (gitignored).
+- `npm run build` – library build to `dist/` (gitignored), then the type declarations.
+- `npm run types` – `tsc` writes `.d.ts` files to `dist/types/` from the JSDoc in `src` (`tsconfig.json`: `allowJs`, `checkJs` off). The public types (`ShadowDiagonalSettings`, `ThemeValues`, ...) are `@typedef`s in `src/cumulus.js`, re-exported by `src/index.js`. Members of `Cumulus` that are not public API are marked `@internal` and given a `@type` (`stripInternal` does not remove JS fields in this TypeScript version, and an untyped field breaks strict consumers).
 - `npm run lint` – ESLint over `src` and `test`.
 - `npm run format` / `npm run format:check` – Prettier (`.prettierrc.json`: print width 100, otherwise defaults).
 - `npm test` – unit tests (Node's built-in runner, no DOM needed).
@@ -28,7 +29,7 @@ Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`
 | `src/lib/cumulus-controller.js` | `CumulusController`: runs one cloud on one canvas. Builds builder + simulation + renderer, converts builder shapes into renderer layers (`drawFrame`), owns the rAF loop, mouse tracking, and the grow/shrink/click-to-regenerate animation. Created per rebuild, discarded with `destroy()`. |
 | `src/lib/easing.js` | `easeOutCubic`, `easeInOutCubic`, `clamp01`. |
 | `src/lib/cloud-builder.js` | `CloudBuilder`: seeded, pure-geometry cloud model. No canvas access. |
-| `src/lib/cloud-simulation.js` | `CloudSimulation`: moves cells/fractals over time (currently the mouse effect; `fractalSim` and `moveCloudCells` exist but are not called). Has its own PRNG. |
+| `src/lib/cloud-simulation.js` | `CloudSimulation`: moves cells over time (currently only the sideways mouse push). No randomness. |
 | `src/lib/hatched-renderer.js` | `HatchedRenderer`: turns layers into per-scanline segments and strokes them. |
 | `src/lib/theme.js` | `defaultTheme` / `createTheme()`: colour palette, sky (top/bottom colour), shadow, cloud shape settings, animation, mouse interaction and per-layer styles. Also the sunset themes and `blendThemes` / `themeAtProgress`. |
 | `src/lib/utils.js` | `mulberry32` PRNG, `perlinNoise1D`, 1-D range maths, polygon edge extraction, `clamp`, `distanceBetweenPoints`. |
@@ -41,7 +42,7 @@ attributes / resize / reduced-motion change
    └─► Cumulus.rebuild()  (batched via scheduleRebuild; destroys the old controller)
          └─► new CumulusController(canvas, config)
                ├─ CloudBuilder(width, height, numCells, seed)     geometry only, deterministic
-               ├─ CloudSimulation(builder, seed)                  animation state, own PRNG
+               ├─ CloudSimulation(builder, interaction)           cell motion state
                ├─ HatchedRenderer(canvas, width, height, ...)     applyTheme(theme) → finaliseRenderer()
                ├─ drawFrame(): builder shapes ─► renderer.add*Layer() ─► renderer.draw()
                └─ rAF loop (only while animate && inView && pageVisible):
@@ -63,13 +64,13 @@ The element creates a `WorkerHost` when `Worker`, `OffscreenCanvas` and `transfe
 6. `fillInnerGaps` – raises `upperExtension` where an outer/upper cell's lower extension would leave a vertical gap.
 7. `createCloudInner` – traces the outline of the union of extension rectangles for each half (left/right of dome centre) into a right-angle polygon (`cloudInnerLeft/Right`; vertices carry `type: "upper"|"lower"` and `id`).
 8. `fillCentreLineGaps` – finds spans on the centre line filled from only one side and adds half-dome `fillCircles`.
-9. `addFractalsToCells` – per cell: 20 light fractals (mid-grey highlights, with `rightPadding` when lower-right) and, 60% of the time, 15 dark fractals (upper-left shading). Light fractals also get `sim` params for an elliptical grow/fall cycle (used only by the unused `fractalSim`).
+9. `addFractalsToCells` – per cell: 20 light fractals (mid-grey highlights, with `rightPadding` when lower-right) and, 60% of the time, 15 dark fractals (upper-left shading).
 10. `addFillCirclesToHorzontals` – random circles along long horizontal edges of the inner polygons → `horizontalFillCircles` (each stores `dx`, its offset from its `linkedCell`).
 11. `sortBySize` – cells sorted largest-first so small cells draw on top; then `updateFills()` once more so the polygons match the sorted order.
 
 **Cells are addressed by id, never by array index.** Ids are assigned in `addCell()` and stay valid after `sortBySize` re-orders `cells`. Use `builder.cellsById.get(id)` (a `Map`, O(1)). Fractals are grouped once at build time on the cell itself: `cell.lightFractals` / `cell.darkFractals` – do not `filter` a flat list per frame.
 
-**Randomness:** one `mulberry32(seed)` stream (`this.random`) consumed in the order above. **Reordering steps or adding/removing `random()` calls changes every cloud for existing seeds.** Anything animated at runtime must use its own stream (`CloudSimulation.random`), never the builder's.
+**Randomness:** one `mulberry32(seed)` stream (`this.random`) consumed in the order above. **Reordering steps or adding/removing `random()` calls changes every cloud for existing seeds.** Anything animated at runtime must use its own random stream, never the builder's.
 
 `updateFills()` recomputes everything derived from cell positions (`createCloudInner`, `fillCentreLineGaps`, horizontal fill circle x). It must be called after cells move, and only then. The controller does this only when `simulation.step()` reports a change.
 
@@ -83,19 +84,16 @@ The element creates a `WorkerHost` when `Worker`, `OffscreenCanvas` and `transfe
 - The edge-noise cache stores the unit random value and multiplies by the (scaled) range each use, so noise generated while the cloud is small is right at full size.
 - TODO in the source and README: morph from the old cloud to the new one without shrinking first.
 
-### CloudSimulation (the mouse as a force)
+### CloudSimulation (the mouse pushes cells aside)
 
-`step(cursor, dt)` (dt in ms) returns true if the cloud moved enough to redraw. Settings are `theme.interaction` (all constants live there, with comments). The controller only passes a cursor once the cloud has finished growing, and calls `resetCursor()` when the loop restarts.
+`step(cursor)` returns true if the cloud moved enough to redraw. It does something only when `theme.interaction.repel` is on (element attribute `mouseRepel`, off by default, on in the demo); then it calls `moveCellsWithMouse`. The controller only passes a cursor once the cloud has finished growing.
 
-- **Bodies.** Each cell has a mass (`(radius / (0.2 × dome radius)) ^ massExponent`), a velocity and an offset from `sim.baseLocation`. Cell positions (`cell.x`, `cell.y`) are the truth; physics runs in sub-steps of at most 8ms.
-- **Mouse.** The cursor's velocity is measured from its movement since the last frame (so a fast stroke is a swept segment: the closest point of the segment to each cell is used and a stroke cannot skip a cell), limited by `maxSpeed` and smoothed by `speedSmoothing`. Strokes slower than `minSpeed` do nothing, so a resting mouse pushes nothing. A cell within `radius + handRadius` of the stroke is pushed along it, plus `parting` of the push directly away from the stroke. Force = `strength * speed * (speed / referenceSpeed)^(speedExponent - 1)` times a smooth falloff with distance. **`speedExponent` must be 2 (quadratic, like drag in water):** at 1 a faster stroke pushes harder for proportionally less time, so the cell moves the same distance whatever the speed. The vertical share of the force is scaled by `verticalStrength`.
-- **Return.** A critically damped spring (`returnTime`, `dampingRatio`) with the same stiffness for every cell, so heavy cells accelerate less and return more slowly. It stiffens near `maxOffsetX/Y`.
-- **Cohesion.** Cells that overlap at rest are neighbours (`neighbours`, weighted by overlap depth) and are tied by springs on their offsets (`neighbourStiffness`), so a pushed cell tugs its neighbours. `maxRelativeOffset` is an optional hard limit on neighbours' relative offsets; it is **off (Infinity)** because it made no measurable difference to tearing beyond the springs.
-- **Walls.** Each cell stays on its side of the dome centre line (fills are built per side), inside the canvas border, and within the maximum offset. A cell that meets a wall stops moving into it.
-- **Rest.** When every cell is slow and within 0.15px of its start the whole cloud snaps exactly back (`settleAndReport`), and `isSettled()` lets `step` skip the physics. Moves under 0.1px since the last report are not reported, so the slow tail does not redraw every frame.
-- The old sideways push (`moveCellsWithMouse`, `MAX_SHIFT` etc.) is unchanged and tested. `step()` calls it when `theme.interaction.repel` is on (element attribute `mouseRepel`, off by default, on in the demo); it does not use the force settings, and the two can be on together.
+- **Push.** Cells within `sim.cursorRadius` of the cursor slide sideways, just far enough to be out of its way, by at most `MAX_SHIFT` from `sim.baseLocation` and `MAX_STEP` per frame. They never move vertically.
+- **Return.** When the cursor leaves, each cell eases back to `sim.baseLocation` (speed `sim.speed`); under `MIN_STEP` it snaps.
+- **Walls.** Each cell stays on its side of the dome centre line (fills are built per side) and inside the canvas border (`BORDER_PADDING`).
+- **Redraw.** `step` reports a change while any cell is still moving, so the loop redraws and rebuilds the fills until the cells are back.
 
-**Fills and vertical movement.** Moving cells tears the fills (a pocket of sky opens inside the cloud) because the fill polygons are built from the cells' relative positions once at rest (`fillInnerGaps` runs only at build). Findings from measuring this (see `test/fill-tears.test.js`): fill edges stay hidden behind their cell because the fill rectangles move rigidly with their cells; spring cohesion cuts tearing a lot; offset limits, stiffer springs and the hard relative limit made no difference; vertical force is the main cause, and `verticalStrength` 0.2 tears no more than sideways-only while 0.3 and up gives large pockets on some seeds. If more vertical movement is wanted, the principled fix is a per-scanline fill derived from the cells each frame (not done: it changes how fills are generated, and the builder's `random()` order must stay stable). When measuring tearing, count only **enclosed pockets** of at least 30px: metrics that compare slits or compare pixel by pixel with the rest cloud measure 1px rasterisation noise and rate a uniform shift of the whole cloud as tearing.
+A force based mouse model (cells with mass, a spring back, cohesion between overlapping cells) and a fractal animation were built and then removed; they are in the git history (before the commit that removed them). The main lesson from the force model: moving cells *vertically* tears the fills (a pocket of sky opens inside the cloud) because the fill polygons are built from the cells' relative positions once at rest (`fillInnerGaps` runs only at build). If vertical movement is wanted again, the principled fix is a per-scanline fill derived from the cells each frame (it changes how fills are generated, and the builder's `random()` order must stay stable). Measure tearing by counting only **enclosed pockets** of at least 30px: metrics that compare slits, or compare pixel by pixel with the rest cloud, measure 1px rasterisation noise and rate a uniform shift of the whole cloud as tearing.
 
 ### HatchedRenderer (rendering)
 
@@ -122,7 +120,7 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 - **Sky.** `theme.background = { borderNoise, top, bottom, paper }`. `top` is `{hue, sat, light}`; `bottom` is optional and, if unset, the whole sky is `top`. The renderer gives each line its own colour (`backgroundColours`, mixed from top to bottom with `mixColours`, hue the short way round the wheel). `colours.background` no longer exists.
 - **Cloud.** `theme.cloud` is passed to `CloudBuilder` as its options (`this.options`). `minBaseWidth` (default 1) is the least distance between the middles of the two cells at the base, in dome radii; `matchBottomCell` moves the new cell further out if needed and never changes the `random()` calls (with `minBaseWidth: 0` the cloud is exactly the one built before it existed: there is a test). `builder.bottomCellIds` holds the two cells. Changing it changes existing seeds.
 - **Padding scale.** Each layer style has `paddingScale` (default 1). `resolveLayerStyles` multiplies `leftPadding`/`rightPadding` by it (before the grow/shrink `scaleStyles`), and the light fractals' per-fractal `rightPadding` is multiplied by `lightFractal.paddingScale`. Set it with `setThemeValues({ layers: { cell: { paddingScale: 0.5 } } })`.
-- **Mouse.** `theme.interaction.enabled` switches the mouse force on; it is off. `theme.interaction.repel` switches the older sideways push on (the `mouseRepel` attribute / config). The controller only listens to the mouse if `regenerateOnClick`, the force or repel is on.
+- **Mouse.** `theme.interaction.repel` switches the sideways push on (the `mouseRepel` attribute / config). The controller only listens to the mouse if `regenerateOnClick` or `repel` is on.
 
 ### Sunset and theme transitions
 
@@ -150,7 +148,6 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 - A small number of seeds (about 1%) still build a cloud slightly past the canvas edge (up to about 13px), left or right, because stepped children and the base cell can extend past the dome. The dome radius is the smaller of the height-based and width-based radius. See the README.
 
 - `cursor` is `null` when the mouse is off the canvas (fixed; it used to default to `{0,0}`).
-- `generateFractalSimParams` compares relative `fractal.x` with absolute `cell.x` (`rightSide`); only matters for the unused fractal sim.
 - Noise arrays have `ceil(width / DRAW_STEP)` entries but the last stroke at the right edge can index one past the end (`NaN` line width, ignored by canvas). Fixing it changes the PRNG stream for the renderer noise.
 - Renderer seed is hardcoded (`10`) and independent of the element's `seed`.
 - Horizontal fill circles move with their linked (outer) cell only; the neighbouring cell on the same edge can move independently.
@@ -172,9 +169,8 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 | --- | --- |
 | `utils.test.js` | PRNG determinism, range maths, `clamp`, `perlinNoise1D` (bounds, zero at nodes, scale, smoothness, node count) |
 | `cloud-builder.test.js` | determinism per seed, **golden hash for seed 323** (fails if `random()` call order changes), id lookup, fractal grouping, base locations, fill updates |
-| `cloud-simulation.test.js` | the force model on a small made-up cloud (no push when still or slow, push along the stroke, faster pushes further, heavier moves less and returns slower, falloff, no skipping, return without overshoot, walls, vertical strength, cohesion, relative limit, cursor reset, long frames, determinism), plus the old push called directly |
+| `cloud-simulation.test.js` | the sideways push (nothing happens unless `repel` is on, push, never vertical or past `MAX_SHIFT`, easing back to the base) |
 | `theme.test.js` | the sunset theme (only a few things changed), the stages, blending (hue the short way, no-bottom sky, other sections untouched), progress through the stages |
-| `fill-tears.test.js`, `fill-pockets.js` | tear guard: random strokes over real clouds must not open pockets of sky or expose fill edges, and cohesion must tear less than none; the helper measures pockets and exposed edges on a simple raster, with its own tests |
 | `hatched-renderer.test.js` | `addSegment` overwrite/split, padding as gap segments (full width, persists when covered, shadow), edge-noise cache (including scaling with range), Perlin line width noise, `clear()` |
 | `easing.test.js` | endpoints and monotonic progress of the easing functions |
 | `cumulus-controller.test.js` | pointer methods without canvas listeners, layer building and keys, animate on/off, pause/resume/destroy, only redraw when something moved, theme, sunset (stages half way, reverse, reversing part way, redrawn each frame, instant without animation, same theme object), grow-in (scale, eased progress, fractals growing with the cells (and `fractalLag`), no jump after pause, finished cloud identical to a static one), click to regenerate (shrink, new seed, ignored clicks, instant without animation, pointer cursor) |

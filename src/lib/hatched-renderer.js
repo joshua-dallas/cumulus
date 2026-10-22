@@ -482,10 +482,6 @@ export class HatchedRenderer {
   }
 
   draw() {
-    //console.log("Drawing to canvas");
-    //console.log(this.layers);
-    //console.log(this.lines);
-    // For testing, we are only going to draw one line at y=200
     for (const line of this.lines) {
       this.drawLine(line);
     }

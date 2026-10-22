@@ -42,7 +42,7 @@ Changing an attribute rebuilds the cloud. Attribute names are case-insensitive i
 
 The seed of the cloud on show is `element.currentSeed`. A click gives the cloud a new seed, and the element fires a `seedchange` event with `{ seed }` in its `detail` (the demo uses both to show the seed). The demo page also has a sunset button, which toggles the `sunset` attribute, and four sliders for the angle and offset of the shadow edge in the day and in the sunset (they call `element.setShadowDiagonal({ day: { angle, xOriginOffset }, sunset: { ... } })`, with angles in radians). The spaces between the lines are see-through, so whatever is behind the canvas on the page shows through them. The gaps within a line (the padding beside the cloud's cells and fractals) are drawn in the paper colour, `background.paper` in the theme (white by default). Unset it to make those gaps see-through too.
 
-**Mouse:** the mouse can click (`regenerateOnClick`) and push cells out of its way (`mouseRepel`, the older sideways push, `moveCellsWithMouse`). The mouse force is built but switched off (`interaction.enabled` in `src/lib/theme.js`): when on, the mouse acts like a hand moving through water or gas, pushing cells along the stroke (faster strokes push harder, bigger cells are heavier, overlapping cells drag each other along, and a spring slowly returns every cell to where it started).
+**Mouse:** the mouse can click (`regenerateOnClick`) and push cells sideways out of its way (`mouseRepel`); they return when it leaves.
 
 **Resizing:** leave `width`/`height` off and size the element with CSS (e.g. `cumulus-canvas { width: 100%; height: 400px }`) to make the cloud fill its container. It is rebuilt when the element's size changes, drawn at the device pixel ratio current at that time (a zoom or monitor change on its own does not trigger a rebuild yet).
 
@@ -63,7 +63,7 @@ A cloud is modelled as three kinds of shape, built by `CloudBuilder` (`src/lib/c
 ```sh
 npm install
 npm run dev     # then open /demo/
-npm run build   # library output in dist/
+npm run build   # library output in dist/, with type declarations in dist/types/
 npm run lint    # ESLint
 npm test        # unit tests (no browser needed)
 ```
@@ -87,8 +87,8 @@ Tests use Node's built-in runner and run without a browser. The custom element i
 - [x] **Sunset mode** – see above. Could also shift the cloud's own colours (lit side warmer, shadow darker), which the theme transition already supports.
 - [x] **Click to regenerate** – `regenerateOnClick` attribute. The cloud shrinks away, then a new one (new random seed) grows.
 - [ ] **Morph on click** – try morphing the old cloud into the new one on click, without shrinking away first.
-- [x] **Force-based mouse interaction** – see above. Vertical movement is limited (`verticalStrength` 0.2) because the fills tear sooner with it.
-- [ ] **More vertical mouse movement** – needs the fills to survive it, most likely by building the fill per scanline from the cells each frame (see CLAUDE.md for the measurements). Also: touch support through pointer events.
+- [x] **Force-based mouse interaction** – built and later removed (it is in the git history), leaving only the sideways push. Vertical movement tore the fills.
+- [ ] **More vertical mouse movement** – needs the fills to survive it, most likely by building the fill per scanline from the cells each frame (see CLAUDE.md). Also: touch support through pointer events.
 - [ ] **More realistic growth** – growth is currently a uniform scale about the base; cells could grow at different times, rise and billow individually.
 - [ ] **More realistic clouds** – shade by light direction, and make growth, rising, drift and dissipation behave more like real cumulus. (Fills are rendered again.)
 - [ ] **Lighter on the CPU** – see below.
@@ -120,6 +120,7 @@ Tests use Node's built-in runner and run without a browser. The custom element i
 - [x] `seed="0"` is allowed; mouse-leave clears the cursor (`null`); removed debug `console.log`s and the debug draw helpers.
 - [ ] Randomise the seed when none is provided; use the element seed for the renderer's noise.
 - [ ] Public API for changing the theme/colours (e.g. a `theme` property or CSS custom properties).
+- [ ] Opt-in debugging: an `onDebug` callback (config option, and an event or property on the element) that receives diagnostic messages, so the library stays silent by default and has no `console.log` calls.
 - [x] Lint script (`npm run lint`).
 - [x] Line width noise is 1-D Perlin noise (`perlinNoise1D` in `src/lib/utils.js`) so lines swell and thin smoothly, like a pen.
 - [ ] Use Perlin noise for the other per-step noise too (y offset, lightness) and for the edge noise.
@@ -134,7 +135,7 @@ The author's own `// TODO:` comments are the detailed backlog; `grep -rn TODO sr
 
 - **Builder** – cell/extension randomisation, extra padding so cells can grow and rise, weighted centring, flagging changed lines between frames, moving the remaining constants to the top.
 - **Renderer** – typed layer/line/segment shapes, continuous (Perlin-style) noise, smooth width/offset transitions between segments, persisted noise across layer re-adds, more line breaks on first/last lines, padding noise, setters for style parameters, only redrawing affected lines.
-- **Controller/simulation** – force/velocity easing for cell motion, spreading fractals when a cell moves, stepped children following their parent.
+- **Controller/simulation** – easing for cell motion, spreading fractals when a cell moves, stepped children following their parent.
 
 ## Licence
 

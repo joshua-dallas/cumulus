@@ -122,8 +122,7 @@ export class CumulusController {
     };
     // The mouse is only followed if it can do something: push the cloud, or click it
     this.followsMouse =
-      this.regenerateOnClick ||
-      (this.animate && (this.theme.interaction.enabled || this.theme.interaction.repel));
+      this.regenerateOnClick || (this.animate && this.theme.interaction.repel);
     if (this.followsMouse && (config.listenToCanvas ?? true)) {
       this.canvas.addEventListener("mousemove", this.onMouseMove);
       this.canvas.addEventListener("mouseleave", this.onMouseLeave);
@@ -142,7 +141,7 @@ export class CumulusController {
     const { width, height, numCells } = this.config;
     this.seed = seed;
     this.builder = new CloudBuilder(width, height, numCells, seed, this.theme.cloud);
-    this.simulation = new CloudSimulation(this.builder, seed, this.theme.interaction);
+    this.simulation = new CloudSimulation(this.builder, this.theme.interaction);
 
     // The cloud grows and shrinks about the middle of its base
     this.anchor = {
@@ -402,7 +401,6 @@ export class CumulusController {
 
     if (shouldRun && this.frameId === null) {
       this.lastTime = this.now(); // time spent paused does not count
-      this.simulation.resetCursor(); // and neither does where the mouse was
       this.frameId = requestAnimationFrame(this.tick);
     } else if (!shouldRun && this.frameId !== null) {
       cancelAnimationFrame(this.frameId);
@@ -423,7 +421,7 @@ export class CumulusController {
     // The mouse only acts on a cloud that has finished growing, as until then what is
     // drawn is not where the cells are
     const cursor = this.scale === 1 ? this.cursor : null;
-    const moved = this.simulation.step(cursor, dt);
+    const moved = this.simulation.step(cursor);
     if (moved) this.builder.updateFills();
     if (moved || resized || restyled) this.redraw();
   }

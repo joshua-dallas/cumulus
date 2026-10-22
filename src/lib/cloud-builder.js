@@ -10,7 +10,7 @@ import {
 // NOTE: Every call to this.random() is part of the public contract of a seed.
 // Adding, removing or reordering calls changes the clouds produced for existing
 // seeds. Anything that needs randomness at runtime (animation) must use its own
-// generator, see cloud-simulation.js.
+// generator.
 
 export class CloudBuilder {
   static MAX_CELLS = 100;
@@ -211,9 +211,6 @@ export class CloudBuilder {
       if (gapsFound.length > 0) {
         let largestGap = Math.min(...gapsFound);
         currentCell.upperExtension = currentCell.y - largestGap + 1;
-        /*console.log(
-          `Found a gap for cell ${currentCell.id} on the ${side}. Setting upper extension to ${currentCell.upperExtension}`,
-        );*/
       }
     }
   }
@@ -541,18 +538,13 @@ export class CloudBuilder {
       );
     }
 
-    let fractal = {
+    return {
       linkedCell: cell.id,
       x,
       y,
       radius,
       rightPadding,
     };
-
-    const sim = this.generateFractalSimParams(fractal, cell);
-    fractal = { ...fractal, sim };
-
-    return fractal;
   }
 
   generateDarkFractalCircle(cell) {
@@ -577,94 +569,6 @@ export class CloudBuilder {
       x,
       y,
       radius,
-    };
-  }
-
-  generateFractalSimParams(fractal, cell) {
-    // We model fractals as moving in an ellipse, relative to their linked cell
-    // There is a location where they grow to their maximum size and then
-    // fall and shrink to nothing. When they reach their horizontal mid-point
-    // they begin to grow again. This models their growing and falling behaviour
-    const fps = 60; // TODO: use timestamp, move these values to the top
-    const minCycleLength = 15 * fps;
-    const maxCycleLength = 30 * fps;
-    const maxRadiusMultiple = 3;
-    const minRotRadiusX = 0; // Ratio of cell radius
-    const maxRotRadiusX = 0.5;
-    const minRotRadiusY = 0.2; // Ratio of cell radius
-    const maxRotRadiusY = 0.5;
-
-    // Chose a cycle length
-    const cycleLength = Math.round(
-      this.random() * (maxCycleLength - minCycleLength) + minCycleLength,
-    );
-
-    // Chose a max radius
-    const maxRadius = Math.round(
-      (this.random() * (maxRadiusMultiple - 1) + 1) * fractal.radius,
-    );
-
-    // Chose a maximum size location
-    const maxRadiusStep = Math.round(
-      Math.round((this.random() * cycleLength) / 4 + cycleLength / 4),
-    );
-
-    // Which side is the fractal on
-    const rightSide = fractal.x > cell.x;
-    const clockwise = rightSide;
-
-    // Decide whether the fractal is currently rising or falling
-    // TODO: Should this be partially random?
-    const horDistFromCellCentre = Math.abs(fractal.x - cell.x);
-    const isFalling = horDistFromCellCentre > cell.radius / 2;
-
-    // Determine the current fractal cycle step
-    let currentStep;
-    if (isFalling) {
-      currentStep = Math.round(
-        ((3 * cycleLength) / 4 - maxRadiusStep) * // The fractal shrinks to zero size at the bottom of the cycle
-          (1 - fractal.radius / maxRadius) +
-          maxRadiusStep,
-      );
-    } else {
-      currentStep = Math.round(maxRadiusStep * (fractal.radius / maxRadius));
-    }
-
-    // Choose a rotation radius
-    const rotRadiusX = Math.round(
-      (this.random() * (maxRotRadiusX - minRotRadiusX) + minRotRadiusX) *
-        cell.radius,
-    );
-
-    let rotRadiusY = Math.round(
-      (this.random() * (maxRotRadiusY - minRotRadiusY) + minRotRadiusY) *
-        cell.radius,
-    );
-
-    rotRadiusY = Math.max(rotRadiusX, rotRadiusY); // The y rotation radius must be larger than the x radius
-
-    // Calculate the centre of rotation
-    const mult = clockwise ? 1 : -1;
-    const rotCentreX = Math.round(
-      fractal.x +
-        mult * Math.cos((currentStep * 2 * Math.PI) / cycleLength) * rotRadiusX,
-    );
-
-    const rotCentreY = Math.round(
-      fractal.y +
-        Math.sin((currentStep * 2 * Math.PI) / cycleLength) * rotRadiusY,
-    );
-
-    return {
-      cycleLength,
-      maxRadius,
-      maxRadiusStep,
-      currentStep,
-      clockwise,
-      rotRadiusX,
-      rotRadiusY,
-      rotCentreX,
-      rotCentreY,
     };
   }
 

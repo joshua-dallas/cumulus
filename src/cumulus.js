@@ -13,6 +13,39 @@ const DEFAULTS = {
 
 const RESIZE_DEBOUNCE_MS = 150;
 
+/**
+ * The edge of the shadow on the cloud. Angles are in radians.
+ * @typedef {object} ShadowEdge
+ * @property {number} [angle] The angle of the edge from the horizontal.
+ * @property {number} [xOriginOffset] Where the edge meets the base of the dome, measured
+ *   from the dome centre in dome radii. Negative is left.
+ */
+
+/**
+ * @typedef {object} ShadowDiagonalSettings
+ * @property {ShadowEdge} [day] The shadow edge in daylight.
+ * @property {ShadowEdge} [sunset] The shadow edge in the sunset.
+ */
+
+/**
+ * A colour in HSL: hue in degrees, saturation and lightness in percent.
+ * @typedef {{ hue?: number, sat?: number, light?: number }} Colour
+ */
+
+/**
+ * Theme values to change. Only the values given are changed.
+ * @typedef {object} ThemeValues
+ * @property {Record<string, Colour>} [colours] Colours of the palette, by name
+ *   (for example `dark`, `mid`).
+ * @property {Record<string, Record<string, number | string>>} [layers] Style values of
+ *   each kind of shape (for example `cell`, `lightFractal`), by layer name.
+ */
+
+/**
+ * The `detail` of the `seedchange` event.
+ * @typedef {{ seed: number }} SeedChangeDetail
+ */
+
 // The <cumulus-canvas> element: owns the DOM (shadow root and canvas), reads
 // attributes, and decides when the cloud must be rebuilt. Everything to do with
 // the cloud itself lives in CumulusController, which runs in a worker (so it never blocks
@@ -47,7 +80,7 @@ const RESIZE_DEBOUNCE_MS = 150;
 // Anything that changes the cloud (attribute, resize, reduced-motion
 // preference) ends in rebuild(), which replaces the cloud.
 export class Cumulus extends HTMLElement {
-  // Attribute names are lower case because HTML lower-cases attribute names
+  /** The attributes that rebuild or restyle the cloud. Lower case, as HTML lower-cases them. */
   static observedAttributes = [
     "width",
     "height",
@@ -64,22 +97,34 @@ export class Cumulus extends HTMLElement {
 
   constructor() {
     super();
+    /** @internal @type {unknown} */
     this.host = null; // Where the cloud runs: in a worker, or on the main thread
+    /** @internal @type {{ width: number, height: number } | null} */
     this.size = null; // The size the current cloud was built with
+    /** @internal @type {boolean} */
     this.hasBuilt = false; // Grow-in only plays the first time
+    /** @internal @type {number | null} */
     this.seedOverride = null; // The seed of a cloud made by clicking, kept across rebuilds
+    /** @internal @type {ShadowDiagonalSettings} */
     this.shadowSettings = { day: {}, sunset: {} }; // Set with setShadowDiagonal, kept across rebuilds
+    /** @internal @type {ThemeValues} */
     this.themeValues = {}; // Set with setThemeValues, kept across rebuilds
+    /** @internal @type {number | null} */
     this.rebuildTimer = null;
+    /** @internal @type {boolean} */
     this.inView = true;
+    /** @internal @type {MediaQueryList} */
     this.reducedMotionQuery = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     );
 
+    /** @internal @type {() => void} */
     this.onReducedMotionChange = () => this.scheduleRebuild();
+    /** @internal @type {() => void} */
     this.onVisibilityChange = () => this.host?.setPageVisible(!document.hidden);
   }
 
+  /** @internal */
   connectedCallback() {
     // The shadow root survives disconnection, so create it only once
     if (!this.shadowRoot) {
@@ -93,11 +138,13 @@ export class Cumulus extends HTMLElement {
     }
     // A canvas given to a worker cannot be used again, so it is replaced on reconnect
     if (!this.canvas) {
+      /** @internal @type {HTMLCanvasElement | null} */
       this.canvas = document.createElement("canvas");
       this.shadowRoot.append(this.canvas);
     }
 
     // Pause the animation when scrolled out of view
+    /** @internal @type {IntersectionObserver} */
     this.intersectionObserver = new IntersectionObserver((entries) => {
       this.inView = entries[entries.length - 1].isIntersecting;
       this.host?.setInView(this.inView);
@@ -105,6 +152,7 @@ export class Cumulus extends HTMLElement {
     this.intersectionObserver.observe(this);
 
     // Rebuild when the element is resized
+    /** @internal @type {ResizeObserver} */
     this.resizeObserver = new ResizeObserver(() => {
       if (this.sizeHasChanged()) this.scheduleRebuild(RESIZE_DEBOUNCE_MS);
     });
@@ -119,6 +167,7 @@ export class Cumulus extends HTMLElement {
     this.rebuild();
   }
 
+  /** @internal */
   disconnectedCallback() {
     clearTimeout(this.rebuildTimer);
     this.rebuildTimer = null;
@@ -138,6 +187,12 @@ export class Cumulus extends HTMLElement {
     this.size = null;
   }
 
+  /**
+   * @internal
+   * @param {string} name
+   * @param {string | null} oldValue
+   * @param {string | null} newValue
+   */
   attributeChangedCallback(name, oldValue, newValue) {
     // Attributes present in the markup are reported before the element is
     // connected. connectedCallback builds from them, so there is nothing to do
@@ -154,6 +209,7 @@ export class Cumulus extends HTMLElement {
     this.scheduleRebuild();
   }
 
+  /** @internal */
   // Several attributes are often changed together, so changes are batched
   // into a single rebuild
   scheduleRebuild(delay = 0) {
@@ -164,6 +220,7 @@ export class Cumulus extends HTMLElement {
     }, delay);
   }
 
+  /** @internal */
   rebuild() {
     this.host ??= workersCanDraw(this.canvas)
       ? new WorkerHost(this.canvas)
@@ -177,6 +234,7 @@ export class Cumulus extends HTMLElement {
     this.host.setPageVisible(!document.hidden);
   }
 
+  /** @internal */
   readConfig() {
     const { width, height } = this.measure({ ignoreCanvas: true });
     return {
@@ -210,28 +268,41 @@ export class Cumulus extends HTMLElement {
     };
   }
 
+  /**
+   * Moves the edge of the shadow, for the day and for the sunset. Anything left out is
+   * unchanged.
+   * @param {ShadowDiagonalSettings} settings
+   */
   setShadowDiagonal({ day = {}, sunset = {} }) {
     Object.assign(this.shadowSettings.day, day);
     Object.assign(this.shadowSettings.sunset, sunset);
     this.host?.setShadowDiagonal({ day, sunset });
   }
 
-  // Changes colours and layer styles of the theme, for example
-  //   { colours: { dark: { light: 40 } }, layers: { cell: { lineWidth: 1.5 } } }
+  /**
+   * Changes colours and layer styles of the theme, for example
+   * `{ colours: { dark: { light: 40 } }, layers: { cell: { lineWidth: 1.5 } } }`.
+   * @param {ThemeValues} values
+   */
   setThemeValues(values) {
     mergeThemeValues(this.themeValues, structuredClone(values));
     this.host?.setThemeValues(values);
   }
 
-  // The seed of the cloud on show
+  /**
+   * The seed of the cloud on show.
+   * @type {number | undefined}
+   */
   get currentSeed() {
     return this.host?.seed;
   }
 
+  /** @internal */
   sunsetDuration() {
     return this.positiveAttribute("sunsetduration", DEFAULTS.sunsetDuration);
   }
 
+  /** @internal */
   // The size the cloud should have: attributes first, then the element's CSS size
   measure({ ignoreCanvas = false } = {}) {
     if (ignoreCanvas) {
@@ -253,12 +324,14 @@ export class Cumulus extends HTMLElement {
     };
   }
 
+  /** @internal */
   sizeHasChanged() {
     if (!this.size) return false;
     const { width, height } = this.measure();
     return width !== this.size.width || height !== this.size.height;
   }
 
+  /** @internal */
   numberAttribute(name, fallback) {
     const raw = this.getAttribute(name);
     if (raw === null || raw.trim() === "") return fallback;
@@ -266,6 +339,7 @@ export class Cumulus extends HTMLElement {
     return Number.isFinite(value) ? value : fallback;
   }
 
+  /** @internal */
   // A boolean attribute is on if it is present, unless it says it is not
   booleanAttribute(name) {
     const raw = this.getAttribute(name);
@@ -273,6 +347,7 @@ export class Cumulus extends HTMLElement {
     return !["false", "0", "off", "no"].includes(raw.trim().toLowerCase());
   }
 
+  /** @internal */
   positiveAttribute(name, fallback) {
     const value = this.numberAttribute(name, fallback);
     return value > 0 ? value : fallback;

@@ -2,30 +2,41 @@
   "name": "@joshua-dallas/cumulus",
   "version": "1.0.1",
   "type": "module",
+  "author": "Joshua Dallas",
+  "description": "A JS library containing a custom HTML element that draws a generative hatched-style image of cumulus clouds.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/joshua-dallas/cumulus.git"
   },
+  "homepage": "https://github.com/joshua-dallas/cumulus#readme",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
   "main": "./dist/cumulus.js",
   "module": "./dist/cumulus.js",
+  "types": "./dist/types/index.d.ts",
   "exports": {
-    ".": "./dist/cumulus.js",
-    "./define": "./dist/define.js"
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./dist/cumulus.js"
+    },
+    "./define": {
+      "types": "./dist/types/define.d.ts",
+      "default": "./dist/define.js"
+    }
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "sideEffects": [
     "./src/define.js",
     "./dist/define.js"
   ],
+  "engines": { "node": "^20.19.0 || >=22.12.0" },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && npm run types",
+    "types": "tsc -p tsconfig.json",
     "lint": "eslint src test",
     "test": "node --test test/*.test.js",
     "preview": "vite preview",
@@ -40,6 +51,7 @@
     "globals": "^17.13.0",
     "prettier": "3.9.10",
     "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
     "vite": "^8.3.2"
   },
   "allowScripts": {
