@@ -2,17 +2,29 @@
 
 A custom HTML element that draws a generative cumulus cloud on a canvas in a hatched style. Each cloud is built from a seed number, so the same seed always gives the same cloud.
 
+## Install
+
+The package is installed from GitHub for now (it is not on the npm registry yet):
+
+```sh
+npm install github:joshua-dallas/cumulus#v1.0.2
+```
+
+Use a release tag (see the [tags](https://github.com/joshua-dallas/cumulus/tags)), not just the branch, so an install always gets the same code. Installing runs `npm run build` (the `prepare` script), so the machine doing the install needs `git` and a normal Node setup. Import it by the package name, `@joshua-dallas/cumulus`, as below. To update, install a newer tag. If npm reports that the install script of `@joshua-dallas/cumulus` was skipped, allow it with `npm install-scripts approve @joshua-dallas/cumulus`.
+
+## Use
+
 ```html
 <cumulus-canvas width="600" height="400" seed="323" numCells="15"></cumulus-canvas>
 <script type="module">
-  import "cumulus/define"; // registers <cumulus-canvas>
+  import "@joshua-dallas/cumulus/define"; // registers <cumulus-canvas>
 </script>
 ```
 
 To register the element under your own name, import the class instead:
 
 ```js
-import { Cumulus } from "cumulus";
+import { Cumulus } from "@joshua-dallas/cumulus";
 customElements.define("my-cloud", Cumulus);
 ```
 
@@ -126,7 +138,8 @@ Tests use Node's built-in runner and run without a browser. The custom element i
 - [ ] Use Perlin noise for the other per-step noise too (y offset, lightness) and for the edge noise.
 - [x] Unit tests for the builder, simulation, renderer and controller (`npm test`).
 - [ ] Tests for the custom element (needs a DOM, e.g. jsdom or a browser), and a README demo image.
-- [ ] **Add a licence before making the repo public.** `LICENCE` is currently an empty file; choose a licence, put its text in `LICENCE`, and add a matching `license` field to `package.json`. The repo is private until then.
+- [x] Licence: PolyForm Noncommercial 1.0.0 (`LICENSE`, and the `license` field in `package.json`).
+- [ ] **Publish to npm.** Install is from GitHub for now. To move: `npm login`, then `npm publish --access public`, change the Install section to `npm install @joshua-dallas/cumulus`. (`prepare` also runs before `npm publish`, so `dist/` is built then too.)
 - [ ] Package metadata: `package.json` is still version `1.0.0` with no description.
 
 ### Open TODOs from the source
@@ -139,4 +152,4 @@ The author's own `// TODO:` comments are the detailed backlog; `grep -rn TODO sr
 
 ## Licence
 
-See [LICENCE](LICENCE).
+[PolyForm Noncommercial 1.0.0](LICENSE): free to use, copy and change for any noncommercial purpose. This is source-available, not open source, because commercial use needs separate permission. Get in touch for a commercial licence.
