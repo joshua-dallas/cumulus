@@ -105,7 +105,7 @@ Tests use Node's built-in runner and run without a browser. The custom element i
 - [ ] Stop the `requestAnimationFrame` loop entirely while the cloud is at rest.
 - [x] Offscreen canvas / worker: the cloud is built, simulated and drawn in a worker (`src/lib/cumulus-worker.js`, hosted by `src/lib/cumulus-host.js`), with a main-thread fallback where a worker cannot draw to a canvas.
 - [ ] Smaller padding and noise for small screens (phones), as a separate theme.
-- [ ] Worker file loading: the build emits the worker as a separate hashed file (`dist/assets/cumulus-worker-<hash>.js`), so the element only works from a bundler that handles `new Worker(new URL(...))`, or when all of `dist/` is served as is. Use a bundler on the site, or inline the worker (`?worker&inline`) so `dist/` is self-contained.
+- [x] Worker file loading: the build emits the worker as a separate hashed file (`dist/assets/cumulus-worker-<hash>.js`) and the library finds it relative to its own file URL (`base: "./"` in `vite.config.js`), so `dist/` works wherever it is served and a consuming site needs no plugin to copy the worker. A consumer that pre-bundles the package (for example Vite's dev `optimizeDeps`) can still break that relative URL; exclude the package from pre-bundling if so.
 
 ### Housekeeping
 

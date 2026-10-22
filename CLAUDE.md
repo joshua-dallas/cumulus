@@ -13,6 +13,7 @@ Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`
 - `npm run dev` – Vite dev server; open `/demo/` (demo imports `../src/define.js`).
 - `npm run build` – library build to `dist/` (gitignored).
 - `npm run lint` – ESLint over `src` and `test`.
+- `npm run format` / `npm run format:check` – Prettier (`.prettierrc.json`: print width 100, otherwise defaults).
 - `npm test` – unit tests (Node's built-in runner, no DOM needed).
 
 ## Layout
