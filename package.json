@@ -1,12 +1,12 @@
 {
   "name": "@joshua-dallas/cumulus",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
-    "repository": {
+  "repository": {
     "type": "git",
     "url": "git+https://github.com/joshua-dallas/cumulus.git"
   },
-    "publishConfig": {
+  "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
   "main": "./dist/cumulus.js",
