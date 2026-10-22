@@ -17,9 +17,6 @@ export class CloudBuilder {
   static MIN_PADDING_RATIO = 0.2; // The minimum padding to ensure cells don't touch the edges of the canvas
   static MIN_CELL_RADIUS = 0.1; // Minimum cell radius as a fraction of the dome radius
   static MAX_CELL_RADIUS = 0.3; // Maximum cell radius as a fraction of the dome radius
-  // TODO: Add additional padding to allow for cells to grow and rise
-  // TODO: Find weighted centre of cells and position in the centre
-  // TODO: Flag what lines have changed between animation frames
 
   // options is the cloud part of a theme (see theme.js):
   //   minBaseWidth: the least distance between the middles of the two cells at the
@@ -150,8 +147,8 @@ export class CloudBuilder {
 
   addExtensionLines() {
     for (const cell of this.cells) {
-      cell.upperExtension = 0; // TODO: Use a random number
-      cell.lowerExtension = cell.radius; // TODO: Use a random number
+      cell.upperExtension = 0;
+      cell.lowerExtension = cell.radius;
     }
   }
 
@@ -330,7 +327,6 @@ export class CloudBuilder {
   }
 
   fillCentreLineGaps() {
-    // TODO: This section needs better naming
     // We will look for locations along the centreline that are only filled from one side
     // At these locations, we will draw a horizonal half dome
 
@@ -366,7 +362,6 @@ export class CloudBuilder {
 
     // Find the union of the gaps, these locations do not need halfdomes
     let gapUnions = intersectionOfMany(lhsGaps, rhsGaps);
-    // TODO: If we want to remove horizontal breaks, here is where to find them, possibly
 
     // RHS half domes = rhs gap - unions
     let rhsFills = [];
@@ -394,9 +389,9 @@ export class CloudBuilder {
   }
 
   addSteppedChildCells() {
-    const probOfSteppedChild = 0.5; // TODO: Move to top
+    const probOfSteppedChild = 0.5;
     const childXOffsetRadio = 0.9; // Spacing between parent and child centres, ratio of parent radius
-    const childRadiusRatio = 0.5; // TODO: Randomise?
+    const childRadiusRatio = 0.5;
     const numberOfChildren = 2;
     // Using a random number, decide whether each cell will have stepped children
     const originalCellCount = this.cells.length;
@@ -455,9 +450,7 @@ export class CloudBuilder {
   }
 
   generateLightFractalsForCell(cell) {
-    // TODO: Better naming
-    // TODO: Move constants elsewhere
-    const numberOfFractals = 20; // TODO: Should this be dependant on cell radius?
+    const numberOfFractals = 20;
 
     // Generate fractal circles
     let lightFractalCircles = [];
@@ -466,16 +459,13 @@ export class CloudBuilder {
     }
 
     // Sort them largest to smallest
-    // TODO: Is it better without this?
     lightFractalCircles.sort((a, b) => b.radius - a.radius);
 
     return lightFractalCircles;
   }
 
   generateDarkFractalsForCell(cell) {
-    // TODO: Better naming
-    // TODO: Move constants elsewhere
-    const numberOfFractals = 15; // TODO: Should this be dependant on cell radius?
+    const numberOfFractals = 15;
     const probOfDarkFractals = 0.4; // Not every cell will have dark fractals
 
     if (this.random() > probOfDarkFractals) return [];
@@ -487,21 +477,19 @@ export class CloudBuilder {
     }
 
     // Sort them largest to smallest
-    // TODO: Is it better without this?
     darkFractalCircles.sort((a, b) => b.radius - a.radius);
 
     return darkFractalCircles;
   }
 
   generateLightFractalCircle(cell) {
-    // TODO: Impose minimum distance and limit maxRadius
     const minRadiusRatio = 0.2; // Ratio of fractal radius to cell radius
     const maxRadiusRatio = 0.45;
     const minRightPadding = 4;
     const maxRightPadding = 6;
-    const shadowAngle = -Math.PI / 4; // TODO: Use a random number for this
+    const shadowAngle = -Math.PI / 4;
 
-    const angle = ((this.random() * 3) / 2) * Math.PI - Math.PI / 2; // TODO: Tailor these angles
+    const angle = ((this.random() * 3) / 2) * Math.PI - Math.PI / 2;
     const dist = this.random() * cell.radius;
 
     // x and y are relative to the cell position
@@ -516,7 +504,6 @@ export class CloudBuilder {
     // it is at the bottom of the cell and should be less bright
     let rightPadding = 0;
     if (angle > shadowAngle) {
-      // TODO: Confirm this is working as intended with the direction of y
       rightPadding = Math.round(
         this.random() * (maxRightPadding - minRightPadding) + minRightPadding,
       );
@@ -536,7 +523,7 @@ export class CloudBuilder {
     const maxRadiusRatio = 0.25;
     const minDist = 0.5; // Fraction of cell radius
 
-    const angle = ((this.random() * 2) / 3) * Math.PI + Math.PI * (2 / 3); // TODO: Tailor these angles
+    const angle = ((this.random() * 2) / 3) * Math.PI + Math.PI * (2 / 3);
     const dist = (this.random() * (1 - minDist) + minDist) * cell.radius;
 
     // x and y are relative to the cell position
@@ -562,8 +549,8 @@ export class CloudBuilder {
   }
 
   addFillCirclesToHorzontalsAux(side) {
-    const maxStraightFillLength = 0.3; // Ratio of dome radius. TODO: Move to top, better name, might be too large
-    const numberOfCircles = 12; // TODO: Make random based on length
+    const maxStraightFillLength = 0.3; // Ratio of dome radius.
+    const numberOfCircles = 12;
 
     let polygon;
     if (side == "left") {

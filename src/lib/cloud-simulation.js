@@ -31,8 +31,6 @@ export class CloudSimulation {
   }
 
   moveCellsWithMouse(cursor) {
-    // TODO: Implement motion with force/velocity for a better easing function
-    // TODO: Spread fractals when moving a cell?
     const { dome, width } = this.builder;
     const { BORDER_PADDING, MAX_STEP, MAX_SHIFT, MIN_STEP } = CloudSimulation;
     let changed = false;
@@ -66,8 +64,6 @@ export class CloudSimulation {
 
         if (cell.sim.baseLocation.x >= dome.x) {
           // The cell is on the right of the dome
-          // TODO: Allow a slight crossing of the centre line that would not affect the visible fill
-          // TODO: Move linked stepped children cells?
           desiredLocation = {
             x: clamp(desiredX, dome.x, width - BORDER_PADDING - cell.radius),
             y: cell.y,
@@ -89,7 +85,6 @@ export class CloudSimulation {
       }
 
       // Move the cell a step towards its desired location
-      // TODO: Round all values to 10th of a pixel
       const desiredXChange = desiredLocation.x - cell.x;
       if (Math.abs(desiredXChange) < MIN_STEP) {
         cell.x = desiredLocation.x;

@@ -5,7 +5,7 @@ const DEFAULTS = {
   width: 500,
   height: 500,
   numCells: 15,
-  seed: 5, // TODO: randomize seed if not provided. 323 is good
+  seed: 5,
   lineWidth: 1,
   lineSpacing: 1.5,
   sunsetDuration: 6000, // ms

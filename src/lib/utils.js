@@ -58,7 +58,6 @@ export function intersection(a, b) {
   return undefined;
 }
 
-// TODO: Better name
 export function intersectionOfMany(listA, listB) {
   // Returns the intersection of two lists of ranges
   // I.e. (union listA) intersection with (union listB)

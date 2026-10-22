@@ -25,3 +25,6 @@ Thumbs.db
 coverage/
 .vite/
 *.tsbuildinfo
+
+# Demo site build
+dist-demo/

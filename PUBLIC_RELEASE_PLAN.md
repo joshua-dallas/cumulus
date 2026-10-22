@@ -33,31 +33,31 @@ These block going public, or make the repo look unfinished or unsafe.
 
 ### Package and install story
 
-- [ ] **Decide where the package lives, and make the README match.** `package.json` is named `@joshua-dallas/cumulus` with `publishConfig` pointing at **GitHub Packages**, which needs an auth token even to install a public package. For a portfolio piece that is friction. Either publish to the public npm registry (remove `publishConfig.registry`) or do not publish and document installing from git (`npm i github:joshua-dallas/cumulus`). The README examples currently import from `"cumulus"`, which is neither name; change them to the real one.
-- [ ] **Fill in `package.json`.** Add `description`, `keywords` (`web-component`, `canvas`, `generative-art`, `custom-element`, `cloud`), `author`, `license`, `homepage`, `bugs`, and an `engines` entry. Add a `types` field once declarations exist (see "Nice to have"), and a `"files"` check with `npm pack --dry-run` to see exactly what would ship (today it ships `src` as well as `dist`, which is fine, but make it on purpose).
+- [x] (Installed from git for now; README updated; moving to npm is a README roadmap item.) **Decide where the package lives, and make the README match.** `package.json` is named `@joshua-dallas/cumulus` with `publishConfig` pointing at **GitHub Packages**, which needs an auth token even to install a public package. For a portfolio piece that is friction. Either publish to the public npm registry (remove `publishConfig.registry`) or do not publish and document installing from git (`npm i github:joshua-dallas/cumulus`). The README examples currently import from `"cumulus"`, which is neither name; change them to the real one.
+- [x] **Fill in `package.json`.** Description, author, licence, homepage, bugs, keywords, `engines` and `files` are set.
 - [ ] **Bump the version deliberately.** It is `1.0.1` with no changelog or tag. Either call it `0.x` until the API settles (the theme API, for example, is still an open roadmap item), or tag `v1.0.0` and write a short `CHANGELOG.md`.
 
 ### README
 
 The README is currently a developer's working notes: long attribute prose, then a roadmap full of ticked-off items and fixed bugs. A visitor needs something else first.
 
-- [ ] **Lead with a picture.** A screenshot or a short GIF/MP4 of the cloud (grow-in, a click making a new one, the sunset fade) above everything else. This is the single most valuable thing for a visual project.
-- [ ] **Add a live demo link.** Deploy `demo/` to GitHub Pages (a small Vite config or build script for the demo, plus a GitHub Actions workflow). Link it at the top of the README and in the repo's "About" box. Note that the demo currently imports `../src/define.js` and only works through the dev server.
-- [ ] **Restructure the README**: one-paragraph pitch, picture, demo link, install, quick start, attributes table, JS API (`currentSeed`, `seedchange`, `setShadowDiagonal`, `setThemeValues`, theming), "how it works" (short), browser support, development, licence. Keep the table of attributes (tidy its column alignment; Prettier will do it).
-- [ ] **Move the roadmap and history out of the README.** Put open items in GitHub Issues (or a `ROADMAP.md` of open items only), and delete the ticked-off list of past fixes: it is useful to you and noise to a visitor. The ~67 `// TODO` comments in the source are a backlog too; turn the real ones into issues and delete the rest, because a public repo with dozens of TODOs reads as unfinished.
-- [ ] **Fix the "Known bugs" visibility.** The roughly 1% of seeds that overflow the canvas is documented in the README roadmap; keep it, but under a short "Known limitations" heading, stated plainly.
-- [ ] **State browser support and fallback**: the worker/OffscreenCanvas path, the main-thread fallback, and that the worker file loads relative to the built file (`base: "./"`). Mention the bundler caveat already in the README.
+- [ ] **Lead with a picture.** The README links `docs/screenshot.png`: add the image.
+- [x] (`vite.demo.config.js` and `.github/workflows/pages.yml`; set the repo's Pages source to "GitHub Actions" and check the link works.) **Add a live demo link.** Deploy `demo/` to GitHub Pages (a small Vite config or build script for the demo, plus a GitHub Actions workflow). Link it at the top of the README and in the repo's "About" box. Note that the demo currently imports `../src/define.js` and only works through the dev server.
+- [x] **Restructure the README**: one-paragraph pitch, picture, demo link, install, quick start, attributes table, JS API (`currentSeed`, `seedchange`, `setShadowDiagonal`, `setThemeValues`, theming), "how it works" (short), browser support, development, licence. Keep the table of attributes (tidy its column alignment; Prettier will do it).
+- [x] (`ROADMAP.md`.) **Move the roadmap and history out of the README.** Put open items in GitHub Issues (or a `ROADMAP.md` of open items only), and delete the ticked-off list of past fixes: it is useful to you and noise to a visitor. The ~67 `// TODO` comments in the source are a backlog too; turn the real ones into issues and delete the rest, because a public repo with dozens of TODOs reads as unfinished.
+- [x] (README "Known limitations".) **Fix the "Known bugs" visibility.** The roughly 1% of seeds that overflow the canvas is documented in the README roadmap; keep it, but under a short "Known limitations" heading, stated plainly.
+- [x] (README "Browser support".) **State browser support and fallback**: the worker/OffscreenCanvas path, the main-thread fallback, and that the worker file loads relative to the built file (`base: "./"`). Mention the bundler caveat already in the README.
 
 ### Code hygiene
 
-- [ ] **Run Prettier on everything.** `npm run format:check` currently fails on 21 files. Run `npm run format` once in a single commit titled "Format" so the diff noise is isolated, then keep `format:check` in CI. Reformat `eslint.config.js`, which is one long line.
+- [x] **Run Prettier on everything.** `npm run format:check` currently fails on 21 files. Run `npm run format` once in a single commit titled "Format" so the diff noise is isolated, then keep `format:check` in CI. Reformat `eslint.config.js`, which is one long line.
 - [x] **Delete commented-out code.** The commented-out `console.log` lines in the renderer and builder are removed. Still to check: a stale comment in `HatchedRenderer.draw()` ("For testing, we are only going to draw one line at y=200").
-- [ ] **Resolve the TODOs** (see README section above): issue or delete each one.
+- [x] (All source TODOs removed; open ones are in `ROADMAP.md`.) **Resolve the TODOs** (see README section above): issue or delete each one.
 - [ ] **Check the demo page** works from a clean clone (`npm install && npm run dev`), has a sensible `<title>`, description and favicon, and does not look like template leftovers. (`demo/demo.css` is a two-line Tailwind import; fine, but check the built result.)
 
 ### Repo basics
 
-- [ ] **Continuous integration**: one GitHub Actions workflow running `npm ci`, `npm run lint`, `npm run format:check`, `npm test` and `npm run build` on push and pull request. Add the status badge to the README. This is the best "adheres to best practices" signal for the least work.
+- [x] (`.github/workflows/ci.yml`; add the status badge to the README once it has run on GitHub.) **Continuous integration**: one GitHub Actions workflow running `npm ci`, `npm run lint`, `npm run format:check`, `npm test` and `npm run build` on push and pull request. Add the status badge to the README. This is the best "adheres to best practices" signal for the least work.
 - [ ] **Set the GitHub repo up**: description, topics, website (the demo link), and a social preview image (the screenshot).
 - [ ] **Decide what to do with `CLAUDE.md`.** It is a very good architecture document, and also an instruction file for a coding assistant. Either keep it as-is (some visitors find it interesting that you work with an AI assistant; say so plainly in the README if you keep it), or move the architecture content to `docs/ARCHITECTURE.md`, link it from the README, and leave a short `CLAUDE.md` pointing at it. Note that some of its lines are addressed to the assistant (for example "Do not make code changes beyond the task asked"), not to contributors, so reread it with a stranger in mind.
 - [ ] **Make the first public commit state clean**: `git status` empty, the build output (`dist/`) not committed, `package-lock.json` committed.

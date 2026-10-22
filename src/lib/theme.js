@@ -82,7 +82,7 @@ export const defaultTheme = {
       paddingScale: 1,
       rightEdgeNoise: 4,
       leftEdgeNoise: 7,
-      rightPadding: 3, // TODO: Try without
+      rightPadding: 3,
       leftPadding: 0,
       lineWidth: 1.3,
       waveAmplitude: 0.6,
@@ -119,7 +119,6 @@ export const defaultTheme = {
       leftPadding: 0,
       rightPadding: 0,
     },
-    // TODO: Top and bottom noise for the inner fills
     innerRight: {
       fill: "dark",
       paddingScale: 1,

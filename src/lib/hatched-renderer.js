@@ -1,17 +1,5 @@
 import { getVerticalLinesOfPolygon, mixColours, mulberry32, perlinNoise1D } from "./utils.js";
 
-// TODO: Use typescript and custom types for layer, line and segment
-// TODO: Should I use get/set patterns to trigger re-render?
-// TODO: Improve noise behaviour (continious), x wave per line
-// TODO: Line width gradient down background
-// TODO: Padding noise?
-// TODO: Higher prob of line breaks (and longer ones) in first and last line
-// TODO: Compute y offsets and save before draw
-// TODO: Smooth transition line width and y offset between segments (have a flag for this)
-// TODO: Set a flag in finalise renderer that is checked in draw
-// TODO: Will it improve performance to round long decimal values to 3sf?
-// TODO: When animating, find the affected lines
-
 // Performance boosts
 // - Compute noise once and save
 // - Save y offsets rather than computing each time
@@ -44,12 +32,11 @@ export class HatchedRenderer {
     this.numXSteps = Math.ceil(width / HatchedRenderer.DRAW_STEP);
 
     // Global styling variables
-    // TODO: Create setters
     this.defaultLineWidth = lineWidth;
     this.lineSpacing = lineSpacing;
     this.backgroundBorderNoise = 0;
     // How much thicker the background lines are at the bottom compared to the top
-    this.backgroundLineWidthGradientDown = 0.4; // TODO: Specify thicker lines at the top, perhaps another variable
+    this.backgroundLineWidthGradientDown = 0.4;
     this.defaultWaveAmplitude = 0.5;
     this.defaultWavePeriod = 60;
     this.hasBackground = true;
@@ -66,7 +53,6 @@ export class HatchedRenderer {
     this.paper = { hue: 0, sat: 0, light: 100 }; // the colour of padding gaps. None: see-through
 
     // Shadow diagonal variables
-    // TODO: Create setters
     this.hasShadowDiagonal = true;
     // The shadow edge passes through the base of the dome, at this x. The dome is set by
     // setDome(); until then it is the whole width of the canvas, resting on the bottom
@@ -77,7 +63,7 @@ export class HatchedRenderer {
     this.shadowDiagonalEdgeNoise = 30;
 
     // Random number generation
-    this.seed = 10; // TODO: Use a random or provided seed
+    this.seed = 10;
     this.random = mulberry32(this.seed);
     this.noise = {
       // Edge noise is cached per layer key (not layer index) so that it stays
@@ -88,7 +74,7 @@ export class HatchedRenderer {
       borderEdgeLeft: [],
       borderEdgeRight: [],
       //wavePeriod: [],
-      yOffset: [], // TODO: When dealing with unquantised locations, use floor
+      yOffset: [],
       lineWidth: [],
       lineBreaks: [],
       lightness: [],
@@ -180,7 +166,7 @@ export class HatchedRenderer {
 
   finaliseRenderer() {
     this.generateLines();
-    this.initialiseNoise(); //TODO: generate?
+    this.initialiseNoise();
     this.updateBackgroundColours();
     this.generateShadowDiagonalEdge();
     this.calculateBaseYOffset();
@@ -188,8 +174,6 @@ export class HatchedRenderer {
   }
 
   initialiseNoise() {
-    // TODO: This needs to be called after all the parameters have been set
-    // TODO: Do we only create noise where it is enabled, or do we only apply it if is enabled?
     // Let's create all the noise first
     const numXSteps = this.numXSteps;
 
@@ -207,7 +191,6 @@ export class HatchedRenderer {
       Math.round((this.random() - 0.5) * HatchedRenderer.WAVE_X_NOISE_RANGE),
     );
     // Noise per line, 1 value for each draw step
-    // TODO: Edge noise with perlin
     this.noise.yOffset = this.lines.map(() =>
       [...Array(numXSteps).keys()].map(
         () => (this.random() - 0.5) * HatchedRenderer.LINE_Y_NOISE_RANGE,
@@ -271,8 +254,7 @@ export class HatchedRenderer {
       this.lines.push({
         id: i,
         y: lineHeight * (i + 1) + this.lineSpacing,
-        startX: 0, // TODO: set by the background padding and mask
-        //endX: this.canvas.width, // TODO: Something is going wrong here. Need to understand more
+        startX: 0,
         endX: this.width,
         segments: [], // Information on what to draw is stored here
         // lengthNoiseTable: [], // What segments have length noise applied, and how much
@@ -296,12 +278,10 @@ export class HatchedRenderer {
   }
 
   setBackgroundBorderNoise(noise) {
-    // TODO: Assert positive
     this.backgroundBorderNoise = noise;
   }
 
   addBackground() {
-    // TODO: Currently, this must be called first. Should the background be separate to layers?
     // For each line, we will add a segment for the background colour
     for (const line of this.lines) {
       let leftOffset = 0;
@@ -576,18 +556,13 @@ export class HatchedRenderer {
     }
 
     // Decide whether to add a line break at the current point
-    // TODO: More line breaks in the background?
     const lineBreak = this.noise.lineBreaks[line.id][xDrawStep];
 
     return [colour, lineWidth, lineBreak];
   }
 
   getStrokeColour(x1, segment, line) {
-    const xDrawStep = Math.floor(
-      // TODO: Find a cleaner way to do this. Maybe a function, or store the value of bounding client
-      // TODO: Does this work as intended?
-      x1 / HatchedRenderer.DRAW_STEP,
-    );
+    const xDrawStep = Math.floor(x1 / HatchedRenderer.DRAW_STEP);
     // A gap is plain paper, with no noise
     if (segment.isGap) {
       return `hsl(${this.paper.hue}, ${this.paper.sat}%, ${this.paper.light}%)`;
@@ -605,7 +580,6 @@ export class HatchedRenderer {
     const lightnessNoise = this.noise.lightness[line.id][xDrawStep];
     const light = Math.min(Math.max(colour.light + lightnessNoise, 0), 100);
     return `hsl(${colour.hue}, ${colour.sat}%, ${light}%)`;
-    // TODO: More lightness noise in the shadow region?
   }
 
   getColourOfSegment(segment, line) {
@@ -747,7 +721,6 @@ export class HatchedRenderer {
 
     const layer = this.layers[segment.layerId] || undefined;
 
-    // TODO: Make this smoother - i.e. continious noise would be better. Same goes for edge noise
     const yNoise = this.noise.yOffset[line.id][xDrawStep];
 
     if (layer) {

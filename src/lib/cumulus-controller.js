@@ -49,9 +49,6 @@ const MAX_FRAME_MS = 100;
 // The cloud is grown and shrunk by scaling it about the middle of its base
 // (see scaleX/scaleY), not by changing the cloud itself, so the cloud built
 // from a seed is the same at every size.
-//
-// TODO: Morph straight from the old cloud to the new one on click, without
-// shrinking away first
 
 export class CumulusController {
   constructor(canvas, config) {

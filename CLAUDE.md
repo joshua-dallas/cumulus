@@ -13,6 +13,8 @@ Vanilla JS (ES modules, no framework, no TypeScript). Vite builds the library (`
 - `npm run dev` – Vite dev server; open `/demo/` (demo imports `../src/define.js`).
 - `npm run build` – library build to `dist/` (gitignored), then the type declarations.
 - `npm run types` – `tsc` writes `.d.ts` files to `dist/types/` from the JSDoc in `src` (`tsconfig.json`: `allowJs`, `checkJs` off). The public types (`ShadowDiagonalSettings`, `ThemeValues`, ...) are `@typedef`s in `src/cumulus.js`, re-exported by `src/index.js`. Members of `Cumulus` that are not public API are marked `@internal` and given a `@type` (`stripInternal` does not remove JS fields in this TypeScript version, and an untyped field breaks strict consumers).
+- `npm run build:demo` – demo page to `dist-demo/` (gitignored).
+- `npm run check` – lint, format check, tests and build: what CI (`.github/workflows/ci.yml`) runs.
 - `npm run lint` – ESLint over `src` and `test`.
 - `npm run format` / `npm run format:check` – Prettier (`.prettierrc.json`: print width 100, otherwise defaults).
 - `npm test` – unit tests (Node's built-in runner, no DOM needed).
@@ -82,7 +84,7 @@ The element creates a `WorkerHost` when `Worker`, `OffscreenCanvas` and `transfe
 - `growIn` plays once, from the constructor. `regenerate(seed)` starts a shrink (from the current scale, so clicking mid-grow works); when it reaches 0 the controller calls `replaceCloud` (`buildCloud` with the new seed, then `config.onSeedChange(seed)`) and grows. Clicks during a shrink are ignored. The renderer is reused, so edge-noise values are kept per layer key.
 - Click and hover (pointer cursor) hit-test the cells and the fill (fill circles and the inner polygons) at their current scale. Without `animate` a click replaces the cloud immediately.
 - The edge-noise cache stores the unit random value and multiplies by the (scaled) range each use, so noise generated while the cloud is small is right at full size.
-- TODO in the source and README: morph from the old cloud to the new one without shrinking first.
+- Planned (see `ROADMAP.md`): morph from the old cloud to the new one without shrinking first.
 
 ### CloudSimulation (the mouse pushes cells aside)
 
@@ -152,7 +154,6 @@ Core model: the canvas is divided into horizontal **lines** (`generateLines`, sp
 - Renderer seed is hardcoded (`10`) and independent of the element's `seed`.
 - Horizontal fill circles move with their linked (outer) cell only; the neighbouring cell on the same edge can move independently.
 - Stepped child cells do not follow their parent when it is pushed by the mouse.
-- The `// TODO` comments in the source are the author's own backlog; grep for them.
 
 ## Conventions
 
@@ -183,4 +184,4 @@ Useful extra check when changing the renderer's segment logic: log every `addSeg
 
 ## Planned work
 
-See the Roadmap in `README.md`.
+See `ROADMAP.md`. Keep the source free of `// TODO` comments: add the item to the roadmap instead.

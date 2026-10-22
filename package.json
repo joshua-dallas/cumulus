@@ -9,7 +9,18 @@
     "url": "git+https://github.com/joshua-dallas/cumulus.git"
   },
   "license": "PolyForm-Noncommercial-1.0.0",
-  "homepage": "https://github.com/joshua-dallas/cumulus#readme",
+  "homepage": "https://joshua-dallas.github.io/cumulus/",
+  "bugs": {
+    "url": "https://github.com/joshua-dallas/cumulus/issues"
+  },
+  "keywords": [
+    "web-component",
+    "custom-element",
+    "canvas",
+    "generative-art",
+    "cloud",
+    "cumulus"
+  ],
   "main": "./dist/cumulus.js",
   "module": "./dist/cumulus.js",
   "types": "./dist/types/index.d.ts",
@@ -36,6 +47,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && npm run types",
+    "build:demo": "vite build --config vite.demo.config.js",
     "types": "tsc -p tsconfig.json",
     "lint": "eslint src test",
     "test": "node --test test/*.test.js",
