@@ -20,19 +20,19 @@ customElements.define("my-cloud", Cumulus);
 
 Changing an attribute rebuilds the cloud. Attribute names are case-insensitive in HTML, so `numCells` and `numcells` are the same.
 
-| Attribute     | Default | Description                                      |
-| ------------- | ------- | ------------------------------------------------ |
-| `width`       | 500     | Canvas width in CSS pixels. If omitted, the element's CSS width is used |
-| `height`      | 500     | Canvas height in CSS pixels. If omitted, the element's CSS height is used |
-| `numCells`    | 15      | Number of main circles forming the cloud (max 100) |
-| `seed`        | 5       | Seed for the generator                           |
-| `lineWidth`   | 1       | Hatch line thickness                             |
-| `lineSpacing` | 1.5     | Gap between hatch lines                          |
-| `growIn`      | off     | The cloud grows from nothing when the element is first created |
-| `mouseRepel` | off | Cells slide sideways out of the way of the mouse, and return when it leaves |
-| `regenerateOnClick` | off | Clicking the cloud shrinks it away and grows a new one (new random seed) |
-| `sunset`      | off     | The sky is a sunset. Adding or removing the attribute fades the sky from blue to orange and raises the shadow, or fades back |
-| `sunsetDuration` | 6000 | How long the sunset fade takes, in ms |
+| Attribute           | Default | Description                                                                                                                  |
+| ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `width`             | 500     | Canvas width in CSS pixels. If omitted, the element's CSS width is used                                                      |
+| `height`            | 500     | Canvas height in CSS pixels. If omitted, the element's CSS height is used                                                    |
+| `numCells`          | 15      | Number of main circles forming the cloud (max 100)                                                                           |
+| `seed`              | 5       | Seed for the generator                                                                                                       |
+| `lineWidth`         | 1       | Hatch line thickness                                                                                                         |
+| `lineSpacing`       | 1.5     | Gap between hatch lines                                                                                                      |
+| `growIn`            | off     | The cloud grows from nothing when the element is first created                                                               |
+| `mouseRepel`        | off     | Cells slide sideways out of the way of the mouse, and return when it leaves                                                  |
+| `regenerateOnClick` | off     | Clicking the cloud shrinks it away and grows a new one (new random seed)                                                     |
+| `sunset`            | off     | The sky is a sunset. Adding or removing the attribute fades the sky from blue to orange and raises the shadow, or fades back |
+| `sunsetDuration`    | 6000    | How long the sunset fade takes, in ms                                                                                        |
 
 `growIn`, `regenerateOnClick`, `mouseRepel` and `sunset` are on when the attribute is present and off when it is missing or set to `false`. A resize rebuild does not replay the grow-in, and a cloud made by clicking keeps its seed through a rebuild until the `seed` attribute is changed. With `prefers-reduced-motion`, `growIn` does nothing and a click replaces the cloud instantly.
 

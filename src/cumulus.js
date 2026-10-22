@@ -114,9 +114,7 @@ export class Cumulus extends HTMLElement {
     /** @internal @type {boolean} */
     this.inView = true;
     /** @internal @type {MediaQueryList} */
-    this.reducedMotionQuery = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    );
+    this.reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     /** @internal @type {() => void} */
     this.onReducedMotionChange = () => this.scheduleRebuild();
@@ -159,10 +157,7 @@ export class Cumulus extends HTMLElement {
     this.resizeObserver.observe(this);
 
     document.addEventListener("visibilitychange", this.onVisibilityChange);
-    this.reducedMotionQuery.addEventListener(
-      "change",
-      this.onReducedMotionChange,
-    );
+    this.reducedMotionQuery.addEventListener("change", this.onReducedMotionChange);
 
     this.rebuild();
   }
@@ -174,10 +169,7 @@ export class Cumulus extends HTMLElement {
     this.intersectionObserver?.disconnect();
     this.resizeObserver?.disconnect();
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
-    this.reducedMotionQuery.removeEventListener(
-      "change",
-      this.onReducedMotionChange,
-    );
+    this.reducedMotionQuery.removeEventListener("change", this.onReducedMotionChange);
     this.host?.destroy();
     if (this.host instanceof WorkerHost) {
       this.canvas.remove();
@@ -240,17 +232,11 @@ export class Cumulus extends HTMLElement {
     return {
       width,
       height,
-      numCells: Math.max(
-        1,
-        Math.floor(this.numberAttribute("numcells", DEFAULTS.numCells)),
-      ),
+      numCells: Math.max(1, Math.floor(this.numberAttribute("numcells", DEFAULTS.numCells))),
       // A cloud made by clicking keeps its seed if the element is rebuilt (resized)
       seed: this.seedOverride ?? this.numberAttribute("seed", DEFAULTS.seed),
       lineWidth: this.positiveAttribute("linewidth", DEFAULTS.lineWidth),
-      lineSpacing: Math.max(
-        0,
-        this.numberAttribute("linespacing", DEFAULTS.lineSpacing),
-      ),
+      lineSpacing: Math.max(0, this.numberAttribute("linespacing", DEFAULTS.lineSpacing)),
       animate: !this.reducedMotionQuery.matches,
       growIn: !this.hasBuilt && this.booleanAttribute("growin"),
       regenerateOnClick: this.booleanAttribute("regenerateonclick"),
@@ -313,14 +299,8 @@ export class Cumulus extends HTMLElement {
     }
     const rect = this.getBoundingClientRect();
     return {
-      width:
-        this.positiveAttribute("width", 0) ||
-        Math.round(rect.width) ||
-        DEFAULTS.width,
-      height:
-        this.positiveAttribute("height", 0) ||
-        Math.round(rect.height) ||
-        DEFAULTS.height,
+      width: this.positiveAttribute("width", 0) || Math.round(rect.width) || DEFAULTS.width,
+      height: this.positiveAttribute("height", 0) || Math.round(rect.height) || DEFAULTS.height,
     };
   }
 

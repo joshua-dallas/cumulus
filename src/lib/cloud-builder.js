@@ -24,13 +24,7 @@ export class CloudBuilder {
   // options is the cloud part of a theme (see theme.js):
   //   minBaseWidth: the least distance between the middles of the two cells at the
   //   base of the cloud, as a multiple of the dome radius. 0 is no minimum
-  constructor(
-    width = 500,
-    height = 500,
-    numCells = 10,
-    seed = 42,
-    options = defaultTheme.cloud,
-  ) {
+  constructor(width = 500, height = 500, numCells = 10, seed = 42, options = defaultTheme.cloud) {
     this.options = options;
     this.random = mulberry32(seed);
     this.width = width;
@@ -40,11 +34,9 @@ export class CloudBuilder {
     // The dome is a half circle, so it is as tall as its radius and as wide as twice it,
     // and the cells around it add their maximum radius to each side
     const heightRadius =
-      (height * (1 - CloudBuilder.MIN_PADDING_RATIO)) /
-      (1 + 2 * CloudBuilder.MAX_CELL_RADIUS); // Adjust for vertical padding and maximum cell radius
+      (height * (1 - CloudBuilder.MIN_PADDING_RATIO)) / (1 + 2 * CloudBuilder.MAX_CELL_RADIUS); // Adjust for vertical padding and maximum cell radius
     const widthRadius =
-      (width * (1 - CloudBuilder.MIN_PADDING_RATIO)) /
-      (2 + 2 * CloudBuilder.MAX_CELL_RADIUS); // Adjust for horizontal padding and maximum cell radius
+      (width * (1 - CloudBuilder.MIN_PADDING_RATIO)) / (2 + 2 * CloudBuilder.MAX_CELL_RADIUS); // Adjust for horizontal padding and maximum cell radius
     const radius = Math.round(Math.min(heightRadius, widthRadius)); // Round to the nearest integer
 
     // Calculate the dome center based on the dome radius and canvas dimensions
@@ -148,10 +140,7 @@ export class CloudBuilder {
     const baseWidth = Math.abs(x - lowestCell.x);
     if (baseWidth < minBaseWidth) {
       const offset = minBaseWidth - Math.abs(lowestCell.x - this.dome.x);
-      x =
-        side > 0
-          ? Math.ceil(this.dome.x + offset)
-          : Math.floor(this.dome.x - offset);
+      x = side > 0 ? Math.ceil(this.dome.x + offset) : Math.floor(this.dome.x - offset);
       x = clamp(x, radius, Math.max(radius, this.width - radius)); // but not out of the canvas
     }
 
@@ -198,9 +187,7 @@ export class CloudBuilder {
             (side == "right" && cell.x > currentCell.x),
         );
 
-      let lowerExtensions = upperOuterCells.map(
-        (cell) => cell.y + cell.lowerExtension,
-      );
+      let lowerExtensions = upperOuterCells.map((cell) => cell.y + cell.lowerExtension);
 
       // Find all instances where the lower extension could create a gap
       let gapsFound = lowerExtensions.filter(
@@ -290,9 +277,7 @@ export class CloudBuilder {
           // This vertex is further in and should not be added
           // Check if the rectangle connected to this vertex exceeds the rectangle from the previous vertex
           // Start by finding the matching lower vertices
-          let vertexLower = vertices.filter(
-            (v) => v.type == "lower" && v.id == vertex.id,
-          )[0];
+          let vertexLower = vertices.filter((v) => v.type == "lower" && v.id == vertex.id)[0];
           let prevVertexLower = vertices.filter(
             (v) => v.type == "lower" && v.id == prevVertex.id,
           )[0];
@@ -524,8 +509,7 @@ export class CloudBuilder {
     const y = Math.round(-dist * Math.sin(angle));
 
     const radius = Math.round(
-      cell.radius *
-        (this.random() * (maxRadiusRatio - minRadiusRatio) + minRadiusRatio),
+      cell.radius * (this.random() * (maxRadiusRatio - minRadiusRatio) + minRadiusRatio),
     );
 
     // If the fractal circle is below a certain angle,
@@ -560,8 +544,7 @@ export class CloudBuilder {
     const y = Math.round(-dist * Math.sin(angle));
 
     const radius = Math.round(
-      cell.radius *
-        (this.random() * (maxRadiusRatio - minRadiusRatio) + minRadiusRatio),
+      cell.radius * (this.random() * (maxRadiusRatio - minRadiusRatio) + minRadiusRatio),
     );
 
     return {
@@ -595,9 +578,7 @@ export class CloudBuilder {
     const horizontalLines = getHorizontalLinesOfPolygon(
       polygon,
       (v1, v2) =>
-        (v1.type == "upper" || v2.type == "upper") &&
-        v1.type != "lower" &&
-        v2.type != "lower",
+        (v1.type == "upper" || v2.type == "upper") && v1.type != "lower" && v2.type != "lower",
     );
     // Based on the length of the horizontal fill,
     // Choose a random number of circles to create.
@@ -611,20 +592,15 @@ export class CloudBuilder {
           let linkedCellId;
           if (side == "left") {
             linkedCellId =
-              line.vertices[0].x < line.vertices[1].x
-                ? line.vertices[0].id
-                : line.vertices[1].id;
+              line.vertices[0].x < line.vertices[1].x ? line.vertices[0].id : line.vertices[1].id;
           } else {
             linkedCellId =
-              line.vertices[0].x > line.vertices[1].x
-                ? line.vertices[0].id
-                : line.vertices[1].id;
+              line.vertices[0].x > line.vertices[1].x ? line.vertices[0].id : line.vertices[1].id;
           }
           const linkedCell = this.cellsById.get(linkedCellId);
 
           const radius = Math.round(
-            this.random() *
-              (linkedCell.lowerExtension - linkedCell.upperExtension),
+            this.random() * (linkedCell.lowerExtension - linkedCell.upperExtension),
           );
 
           this.horizontalFillCircles.push({
@@ -642,8 +618,7 @@ export class CloudBuilder {
   randomCellRadius() {
     return Math.round(
       this.dome.radius *
-        (this.random() *
-          (CloudBuilder.MAX_CELL_RADIUS - CloudBuilder.MIN_CELL_RADIUS) +
+        (this.random() * (CloudBuilder.MAX_CELL_RADIUS - CloudBuilder.MIN_CELL_RADIUS) +
           CloudBuilder.MIN_CELL_RADIUS),
     );
   }

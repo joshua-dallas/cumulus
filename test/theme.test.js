@@ -43,7 +43,12 @@ test("the sunset theme is a copy of the theme with only a few things changed", (
 
   assert.notEqual(sunset, base);
   const changed = differences(base, sunset);
-  assert.ok(changed.every((path) => path.startsWith("background.top") || path.startsWith("shadowDiagonal.")), changed.join(", "));
+  assert.ok(
+    changed.every(
+      (path) => path.startsWith("background.top") || path.startsWith("shadowDiagonal."),
+    ),
+    changed.join(", "),
+  );
   assert.ok(changed.length > 0);
 
   assert.ok(sunset.background.top.hue < 40); // orange
@@ -60,16 +65,29 @@ test("the stages of a sunset: day, then dusk (blue above orange, shadow half way
   assert.equal(day, base); // the theme itself, so that it stays up to date
   assert.deepEqual(dusk.background.top, day.background.top); // still a blue sky at the top
   assert.deepEqual(dusk.background.bottom, sunset.background.top); // orange at the bottom
-  assert.equal(dusk.shadowDiagonal.angle, (day.shadowDiagonal.angle + sunset.shadowDiagonal.angle) / 2);
-  assert.deepEqual(differences(day, dusk).filter((p) => !p.startsWith("background.bottom") && !p.startsWith("shadowDiagonal.")), []);
+  assert.equal(
+    dusk.shadowDiagonal.angle,
+    (day.shadowDiagonal.angle + sunset.shadowDiagonal.angle) / 2,
+  );
+  assert.deepEqual(
+    differences(day, dusk).filter(
+      (p) => !p.startsWith("background.bottom") && !p.startsWith("shadowDiagonal."),
+    ),
+    [],
+  );
 });
 
 test("blending themes mixes the sky and the shadow, and leaves everything else as it was", () => {
   const [day, , sunset] = createSunsetKeyframes(createTheme());
   const half = blendThemes(day, sunset, 0.5);
 
-  assert.equal(half.shadowDiagonal.angle, (day.shadowDiagonal.angle + sunset.shadowDiagonal.angle) / 2);
-  assert.ok(half.background.top.light >= Math.min(day.background.top.light, sunset.background.top.light));
+  assert.equal(
+    half.shadowDiagonal.angle,
+    (day.shadowDiagonal.angle + sunset.shadowDiagonal.angle) / 2,
+  );
+  assert.ok(
+    half.background.top.light >= Math.min(day.background.top.light, sunset.background.top.light),
+  );
   for (const key of Object.keys(day)) {
     if (!BLENDED_SECTIONS.includes(key)) assert.equal(half[key], day[key]); // the very same object
   }
@@ -106,7 +124,8 @@ test("on the way to the sunset the shadow only rises and the sky only gets close
   const keyframes = createSunsetKeyframes(createTheme());
   const orange = keyframes[2].background.top;
   // How far a colour is from the orange, going the shortest way round the colour wheel
-  const hueFromOrange = ({ hue }) => Math.min(Math.abs(hue - orange.hue), 360 - Math.abs(hue - orange.hue));
+  const hueFromOrange = ({ hue }) =>
+    Math.min(Math.abs(hue - orange.hue), 360 - Math.abs(hue - orange.hue));
 
   let angle = Infinity;
   let top = Infinity;
@@ -114,9 +133,15 @@ test("on the way to the sunset the shadow only rises and the sky only gets close
   for (let step = 0; step <= 20; step++) {
     const theme = themeAtProgress(keyframes, step / 20);
     assert.ok(theme.shadowDiagonal.angle <= angle + 1e-9, "the shadow went down");
-    assert.ok(hueFromOrange(theme.background.top) <= top + 1e-9, "the top of the sky moved away from orange");
+    assert.ok(
+      hueFromOrange(theme.background.top) <= top + 1e-9,
+      "the top of the sky moved away from orange",
+    );
     const skyBottom = theme.background.bottom ?? theme.background.top; // no bottom: the same as the top
-    assert.ok(hueFromOrange(skyBottom) <= bottom + 1e-9, "the bottom of the sky moved away from orange");
+    assert.ok(
+      hueFromOrange(skyBottom) <= bottom + 1e-9,
+      "the bottom of the sky moved away from orange",
+    );
     angle = theme.shadowDiagonal.angle;
     top = hueFromOrange(theme.background.top);
     bottom = hueFromOrange(skyBottom);
@@ -128,7 +153,10 @@ test("on the way to the sunset the shadow only rises and the sky only gets close
 
 test("the sunset shadow can be put somewhere else, and dusk is half way between", () => {
   const base = createTheme();
-  const [day, dusk, sunset] = createSunsetKeyframes(base, { shadowAngle: 1, shadowXOriginOffset: 0.9 });
+  const [day, dusk, sunset] = createSunsetKeyframes(base, {
+    shadowAngle: 1,
+    shadowXOriginOffset: 0.9,
+  });
 
   assert.equal(sunset.shadowDiagonal.angle, 1);
   assert.equal(sunset.shadowDiagonal.xOriginOffset, 0.9);
@@ -144,7 +172,11 @@ test("the paper is white, and the same all through the sunset; with no paper the
 
   const keyframes = createSunsetKeyframes(createTheme());
   for (const progress of [0, 0.4, 0.5, 0.8, 1]) {
-    assert.deepEqual(themeAtProgress(keyframes, progress).background.paper, { hue: 0, sat: 0, light: 100 });
+    assert.deepEqual(themeAtProgress(keyframes, progress).background.paper, {
+      hue: 0,
+      sat: 0,
+      light: 100,
+    });
   }
 
   const base = createTheme();

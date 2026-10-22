@@ -47,17 +47,14 @@ export class CloudSimulation {
 
       if (
         cursor &&
-        distanceBetweenPoints(cell.x, cell.y, cursor.x, cursor.y) <
-          cell.sim.cursorRadius
+        distanceBetweenPoints(cell.x, cell.y, cursor.x, cursor.y) < cell.sim.cursorRadius
       ) {
         // Get the cursor position relative to the cell centre
         const relX = Math.abs(cursor.x - cell.x);
         const relY = Math.abs(cursor.y - cell.y);
 
         // How much would the cell need to shift left or right for the cursor to be outside the cursor radius
-        let shiftX = Math.ceil(
-          Math.sqrt(cell.sim.cursorRadius ** 2 - relY ** 2) - relX,
-        );
+        let shiftX = Math.ceil(Math.sqrt(cell.sim.cursorRadius ** 2 - relY ** 2) - relX);
         shiftX = cursor.x >= cell.x ? -shiftX : shiftX; // If the cursor is to the right, shift the cell left
 
         let desiredX = cell.x + shiftX;
@@ -84,15 +81,9 @@ export class CloudSimulation {
         }
 
         // Allow the cells to return to their base location
-        if (
-          cursor.x < desiredLocation.x &&
-          desiredLocation.x < cell.sim.baseLocation.x
-        ) {
+        if (cursor.x < desiredLocation.x && desiredLocation.x < cell.sim.baseLocation.x) {
           desiredLocation = cell.sim.baseLocation;
-        } else if (
-          cursor.x > desiredLocation.x &&
-          desiredLocation.x > cell.sim.baseLocation.x
-        ) {
+        } else if (cursor.x > desiredLocation.x && desiredLocation.x > cell.sim.baseLocation.x) {
           desiredLocation = cell.sim.baseLocation;
         }
       }

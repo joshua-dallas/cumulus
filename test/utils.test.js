@@ -40,15 +40,43 @@ test("subtractRange removes the overlap, possibly splitting the range", () => {
   assert.deepEqual(subtractRange([0, 10], [0, 10]), []);
   assert.deepEqual(subtractRange([0, 10], [0, 4]), [[4, 10]]);
   assert.deepEqual(subtractRange([0, 10], [6, 10]), [[0, 6]]);
-  assert.deepEqual(subtractRange([0, 10], [4, 6]), [[0, 4], [6, 10]]);
+  assert.deepEqual(subtractRange([0, 10], [4, 6]), [
+    [0, 4],
+    [6, 10],
+  ]);
 });
 
 test("subtractRanges removes several sorted ranges", () => {
-  assert.deepEqual(subtractRanges([0, 10], [[2, 3], [6, 8]]), [[0, 2], [3, 6], [8, 10]]);
+  assert.deepEqual(
+    subtractRanges(
+      [0, 10],
+      [
+        [2, 3],
+        [6, 8],
+      ],
+    ),
+    [
+      [0, 2],
+      [3, 6],
+      [8, 10],
+    ],
+  );
 });
 
 test("intersectionOfMany intersects every pair of ranges", () => {
-  assert.deepEqual(intersectionOfMany([[0, 5], [10, 15]], [[3, 12]]), [[3, 5], [10, 12]]);
+  assert.deepEqual(
+    intersectionOfMany(
+      [
+        [0, 5],
+        [10, 15],
+      ],
+      [[3, 12]],
+    ),
+    [
+      [3, 5],
+      [10, 12],
+    ],
+  );
 });
 
 test("clamp", () => {

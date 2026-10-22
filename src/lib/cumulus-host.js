@@ -118,7 +118,10 @@ export class WorkerHost {
       return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     };
     this.pointerListeners = [
-      ["mousemove", (event) => this.worker.postMessage({ type: "pointermove", ...position(event) })],
+      [
+        "mousemove",
+        (event) => this.worker.postMessage({ type: "pointermove", ...position(event) }),
+      ],
       ["mouseleave", () => this.worker.postMessage({ type: "pointerleave" })],
       ["click", (event) => this.worker.postMessage({ type: "pointerclick", ...position(event) })],
     ];

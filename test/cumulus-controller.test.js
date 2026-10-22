@@ -68,7 +68,10 @@ test("when animating, the loop is running, and the mouse is listened to only if 
   assert.equal(plain.canvas.listeners.length, 0); // the mouse push is off, and nothing can be clicked
 
   const withRepel = create({ theme: mouseTheme() });
-  assert.deepEqual(withRepel.canvas.listeners.map((l) => l.type).sort(), ["mouseleave", "mousemove"]);
+  assert.deepEqual(withRepel.canvas.listeners.map((l) => l.type).sort(), [
+    "mouseleave",
+    "mousemove",
+  ]);
 });
 
 test("the loop pauses when off-screen or the page is hidden, and resumes", () => {
@@ -153,7 +156,10 @@ test("by default the mouse does not move the cloud, but clicking it still makes 
     move({ clientX: dome.x - 150 + i * 24, clientY: dome.y - dome.radius / 2 });
     runFor(16, 16);
   }
-  assert.deepEqual(controller.builder.cells.map((c) => [c.x, c.y]), before);
+  assert.deepEqual(
+    controller.builder.cells.map((c) => [c.x, c.y]),
+    before,
+  );
 
   const cell = controller.builder.cells[0];
   canvas.listeners.find((l) => l.type === "click").handler({ clientX: cell.x, clientY: cell.y });
@@ -338,7 +344,11 @@ test("clicking a growing cloud shrinks it from the size it has reached", () => {
 });
 
 test("without animation, a click replaces the cloud immediately", () => {
-  const { canvas, controller } = create({ animate: false, regenerateOnClick: true, randomSeed: () => 77 });
+  const { canvas, controller } = create({
+    animate: false,
+    regenerateOnClick: true,
+    randomSeed: () => 77,
+  });
   const cell = controller.builder.cells[0];
 
   click(canvas, cell.x, cell.y);
@@ -349,9 +359,15 @@ test("without animation, a click replaces the cloud immediately", () => {
 });
 
 test("click handling is only attached when regenerateOnClick is on", () => {
-  assert.equal(create().canvas.listeners.some((l) => l.type === "click"), false);
+  assert.equal(
+    create().canvas.listeners.some((l) => l.type === "click"),
+    false,
+  );
   const { canvas, controller } = create({ regenerateOnClick: true });
-  assert.equal(canvas.listeners.some((l) => l.type === "click"), true);
+  assert.equal(
+    canvas.listeners.some((l) => l.type === "click"),
+    true,
+  );
   controller.destroy();
   assert.equal(canvas.listeners.length, 0);
 });
@@ -371,7 +387,8 @@ test("the pointer cursor shows over the cloud when it can be clicked", () => {
 
 // These tests are about the theme, not the shape of the cloud, so the cloud is a small one:
 // every frame of a change draws it again
-const createSmall = (overrides = {}) => create({ width: 160, height: 100, numCells: 2, ...overrides });
+const createSmall = (overrides = {}) =>
+  create({ width: 160, height: 100, numCells: 2, ...overrides });
 
 const DAY = createTheme();
 const SUNSET = createSunsetKeyframes(createTheme())[2];
@@ -385,7 +402,11 @@ const look = (controller) => ({
 
 test("by default the sky is the day sky", () => {
   const { controller } = createSmall();
-  assert.deepEqual(look(controller), { top: DAY.background.top, bottom: undefined, angle: DAY.shadowDiagonal.angle });
+  assert.deepEqual(look(controller), {
+    top: DAY.background.top,
+    bottom: undefined,
+    angle: DAY.shadowDiagonal.angle,
+  });
   assert.equal(controller.renderer.backgroundTop, controller.theme.background.top);
 });
 
@@ -406,7 +427,9 @@ test("fading to a sunset goes through dusk half way, and ends as a sunset", () =
   const dusk = look(controller);
   assert.deepEqual(dusk.top, DAY.background.top); // still a blue sky at the top...
   assert.deepEqual(dusk.bottom, SUNSET.background.top); // ...and orange at the bottom
-  assert.ok(Math.abs(dusk.angle - (DAY.shadowDiagonal.angle + SUNSET.shadowDiagonal.angle) / 2) < 1e-6); // shadow half way
+  assert.ok(
+    Math.abs(dusk.angle - (DAY.shadowDiagonal.angle + SUNSET.shadowDiagonal.angle) / 2) < 1e-6,
+  ); // shadow half way
 
   runFor(2200);
   assert.deepEqual(look(controller).top, SUNSET.background.top);
@@ -512,7 +535,11 @@ test("without animation the sunset is immediate", () => {
 });
 
 test("the sunset carries on when the cloud is replaced by a click", () => {
-  const { canvas, controller } = createSmall({ sunset: true, regenerateOnClick: true, randomSeed: () => 99 });
+  const { canvas, controller } = createSmall({
+    sunset: true,
+    regenerateOnClick: true,
+    randomSeed: () => 99,
+  });
   const cell = controller.builder.cells[0];
   canvas.listeners.find((l) => l.type === "click").handler({ clientX: cell.x, clientY: cell.y });
   runFor(controller.theme.animation.shrinkDuration + 200);
@@ -533,7 +560,10 @@ test("the shadow edge can be moved for the day and for the sunset", () => {
   controller.setShadowDiagonal({ day: { angle: 2, xOriginOffset: 0.4 } });
   assert.equal(controller.theme.shadowDiagonal.angle, 2);
   assert.equal(controller.renderer.shadowDiagonalAngle, 2);
-  assert.equal(controller.renderer.shadowDiagonalXOrigin, controller.builder.dome.x + 0.4 * controller.builder.dome.radius);
+  assert.equal(
+    controller.renderer.shadowDiagonalXOrigin,
+    controller.builder.dome.x + 0.4 * controller.builder.dome.radius,
+  );
 
   // The sunset shadow does not show in the day, but is where the sunset ends up
   controller.setShadowDiagonal({ sunset: { angle: 1, xOriginOffset: 0.9 } });
@@ -582,10 +612,20 @@ test("the canvas is cleared to see-through by default, so the page behind shows 
   const canvas = mockCanvas();
   const calls = [];
   const context = canvas.getContext();
-  Object.defineProperty(context, "fillRect", { value: (...args) => calls.push(["fillRect", ...args]) });
-  Object.defineProperty(context, "clearRect", { value: (...args) => calls.push(["clearRect", ...args]) });
+  Object.defineProperty(context, "fillRect", {
+    value: (...args) => calls.push(["fillRect", ...args]),
+  });
+  Object.defineProperty(context, "clearRect", {
+    value: (...args) => calls.push(["clearRect", ...args]),
+  });
 
-  const controller = new CumulusController(canvas, { ...config, width: 160, height: 100, numCells: 2, animate: false });
+  const controller = new CumulusController(canvas, {
+    ...config,
+    width: 160,
+    height: 100,
+    numCells: 2,
+    animate: false,
+  });
   controller.redraw();
   assert.deepEqual(calls[0], ["clearRect", 0, 0, 160, 100]);
   assert.ok(calls.every((call) => call[0] === "clearRect"));
@@ -599,7 +639,14 @@ test("a paper colour is only used for the gaps in lines: the canvas itself is ne
   const theme = createTheme();
   theme.background.paper = { hue: 0, sat: 0, light: 100 };
 
-  const controller = new CumulusController(canvas, { ...config, width: 160, height: 100, numCells: 2, animate: false, theme });
+  const controller = new CumulusController(canvas, {
+    ...config,
+    width: 160,
+    height: 100,
+    numCells: 2,
+    animate: false,
+    theme,
+  });
   controller.redraw();
   assert.deepEqual(fills, []);
 });
@@ -645,12 +692,18 @@ test("pointer methods drive the cloud without listening to the canvas (as in a w
 
 test("setThemeValues changes layer styles and shades, redraws, and keeps them through a sunset", () => {
   const { controller } = create({ animate: false });
-  controller.setThemeValues({ colours: { dark: { light: 33 } }, layers: { cell: { lineWidth: 2.5 } } });
+  controller.setThemeValues({
+    colours: { dark: { light: 33 } },
+    layers: { cell: { lineWidth: 2.5 } },
+  });
 
   assert.equal(controller.theme.layers.cell.lineWidth, 2.5);
   assert.equal(controller.theme.layers.cell.waveAmplitude, defaultTheme.layers.cell.waveAmplitude); // others kept
   assert.equal(controller.theme.colours.dark.light, 33);
-  assert.equal(controller.renderer.layers.find((layer) => layer.key.startsWith("cell-")).lineWidth, 2.5);
+  assert.equal(
+    controller.renderer.layers.find((layer) => layer.key.startsWith("cell-")).lineWidth,
+    2.5,
+  );
 
   controller.setSunset(true, 1000); // no animation: at once
   assert.equal(controller.theme.colours.dark.light, 33);
@@ -661,21 +714,28 @@ test("setThemeValues changes layer styles and shades, redraws, and keeps them th
 test("paddingScale multiplies a layer's padding, including the light fractals' own padding", () => {
   const { controller } = create({ animate: false });
   const layer = (key) => controller.renderer.layers.find((l) => l.key === key);
-  const cell = controller.builder.cells.find((c) => c.lightFractals.some((f) => f.rightPadding > 0));
+  const cell = controller.builder.cells.find((c) =>
+    c.lightFractals.some((f) => f.rightPadding > 0),
+  );
   const i = cell.lightFractals.findIndex((f) => f.rightPadding > 0);
   const fractalKey = `light-fractal-${cell.id}-${i}`;
 
   assert.equal(layer(`cell-${cell.id}`).rightPadding, defaultTheme.layers.cell.rightPadding);
   assert.equal(layer(fractalKey).rightPadding, cell.lightFractals[i].rightPadding);
 
-  controller.setThemeValues({ layers: { cell: { paddingScale: 0.5 }, lightFractal: { paddingScale: 0.25 } } });
+  controller.setThemeValues({
+    layers: { cell: { paddingScale: 0.5 }, lightFractal: { paddingScale: 0.25 } },
+  });
   assert.equal(layer(`cell-${cell.id}`).rightPadding, defaultTheme.layers.cell.rightPadding * 0.5);
   assert.equal(layer(fractalKey).rightPadding, cell.lightFractals[i].rightPadding * 0.25);
   assert.equal(controller.theme.layers.cell.rightPadding, defaultTheme.layers.cell.rightPadding); // theme unchanged
 });
 
 test("themeValues in the config are applied from the start", () => {
-  const { controller } = create({ animate: false, themeValues: { colours: { mid: { light: 61 } } } });
+  const { controller } = create({
+    animate: false,
+    themeValues: { colours: { mid: { light: 61 } } },
+  });
   assert.equal(controller.theme.colours.mid.light, 61);
   assert.equal(defaultTheme.colours.mid.light, 66); // the default theme itself is not changed
 });

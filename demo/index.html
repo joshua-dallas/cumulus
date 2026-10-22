@@ -8,9 +8,7 @@
   <body class="min-h-screen bg-amber-50 px-6 py-12 text-blue-950 antialiased">
     <main class="mx-auto max-w-5xl">
       <header class="mb-8 border-b border-slate-700 pb-5">
-        <p class="text-sm font-medium uppercase tracking-widest text-cyan-300">
-          Canvas element
-        </p>
+        <p class="text-sm font-medium uppercase tracking-widest text-cyan-300">Canvas element</p>
         <h1 class="mt-2 text-4xl font-semibold">Cumulus Demo</h1>
       </header>
       <section class="overflow-auto rounded-lg bg-white p-4 shadow-xl">
@@ -38,25 +36,33 @@
       <section class="mt-6 rounded-lg bg-white p-4 shadow-xl">
         <h2 class="text-lg font-semibold">Shadow edge</h2>
         <p class="mt-1 text-sm text-slate-500">
-          The angle is measured from the base of the cloud (90&deg; is vertical). The offset is how far
-          from the middle of the base, as a percentage of the cloud's radius, the edge meets the base. Day sliders show in the day, sunset sliders when
-          the sunset is on.
+          The angle is measured from the base of the cloud (90&deg; is vertical). The offset is how
+          far from the middle of the base, as a percentage of the cloud's radius, the edge meets the
+          base. Day sliders show in the day, sunset sliders when the sunset is on.
         </p>
         <div class="mt-4 grid gap-x-10 gap-y-4 sm:grid-cols-2">
           <label class="block text-sm">
-            <span class="flex justify-between"><span>Day angle</span><output id="day-angle-value" class="font-mono"></output></span>
+            <span class="flex justify-between"
+              ><span>Day angle</span><output id="day-angle-value" class="font-mono"></output
+            ></span>
             <input id="day-angle" type="range" min="10" max="170" step="1" class="w-full" />
           </label>
           <label class="block text-sm">
-            <span class="flex justify-between"><span>Sunset angle</span><output id="sunset-angle-value" class="font-mono"></output></span>
+            <span class="flex justify-between"
+              ><span>Sunset angle</span><output id="sunset-angle-value" class="font-mono"></output
+            ></span>
             <input id="sunset-angle" type="range" min="10" max="170" step="1" class="w-full" />
           </label>
           <label class="block text-sm">
-            <span class="flex justify-between"><span>Day offset</span><output id="day-offset-value" class="font-mono"></output></span>
+            <span class="flex justify-between"
+              ><span>Day offset</span><output id="day-offset-value" class="font-mono"></output
+            ></span>
             <input id="day-offset" type="range" min="-100" max="100" step="1" class="w-full" />
           </label>
           <label class="block text-sm">
-            <span class="flex justify-between"><span>Sunset offset</span><output id="sunset-offset-value" class="font-mono"></output></span>
+            <span class="flex justify-between"
+              ><span>Sunset offset</span><output id="sunset-offset-value" class="font-mono"></output
+            ></span>
             <input id="sunset-offset" type="range" min="-100" max="100" step="1" class="w-full" />
           </label>
         </div>
@@ -104,10 +110,38 @@
       const sunset = createSunsetTheme().shadowDiagonal;
       const toDegrees = (radians) => Math.round((radians * 180) / Math.PI);
       const sliders = [
-        { id: "day-angle", stage: "day", key: "angle", start: toDegrees(day.angle), unit: "\u00b0", read: (v) => (v * Math.PI) / 180 },
-        { id: "sunset-angle", stage: "sunset", key: "angle", start: toDegrees(sunset.angle), unit: "\u00b0", read: (v) => (v * Math.PI) / 180 },
-        { id: "day-offset", stage: "day", key: "xOriginOffset", start: Math.round(day.xOriginOffset * 100), unit: "%", read: (v) => v / 100 },
-        { id: "sunset-offset", stage: "sunset", key: "xOriginOffset", start: Math.round(sunset.xOriginOffset * 100), unit: "%", read: (v) => v / 100 },
+        {
+          id: "day-angle",
+          stage: "day",
+          key: "angle",
+          start: toDegrees(day.angle),
+          unit: "\u00b0",
+          read: (v) => (v * Math.PI) / 180,
+        },
+        {
+          id: "sunset-angle",
+          stage: "sunset",
+          key: "angle",
+          start: toDegrees(sunset.angle),
+          unit: "\u00b0",
+          read: (v) => (v * Math.PI) / 180,
+        },
+        {
+          id: "day-offset",
+          stage: "day",
+          key: "xOriginOffset",
+          start: Math.round(day.xOriginOffset * 100),
+          unit: "%",
+          read: (v) => v / 100,
+        },
+        {
+          id: "sunset-offset",
+          stage: "sunset",
+          key: "xOriginOffset",
+          start: Math.round(sunset.xOriginOffset * 100),
+          unit: "%",
+          read: (v) => v / 100,
+        },
       ];
       // Sliders for the shades, and the line widths and waves of each part of the cloud
       const theme = createTheme();
@@ -159,10 +193,16 @@
 
       const shades = addGroup("Shades (lightness)");
       for (const { label, colour } of lightnessSliders) {
-        addSlider(shades, label, theme.colours[colour].light, { min: 0, max: 100, step: 1 }, (light) => {
-          cloud.setThemeValues({ colours: { [colour]: { light } } });
-          ((values.colours[colour] ??= {}).light = light), showValues();
-        });
+        addSlider(
+          shades,
+          label,
+          theme.colours[colour].light,
+          { min: 0, max: 100, step: 1 },
+          (light) => {
+            cloud.setThemeValues({ colours: { [colour]: { light } } });
+            (((values.colours[colour] ??= {}).light = light), showValues());
+          },
+        );
       }
       for (const { label, layers } of parts) {
         const group = addGroup(label);

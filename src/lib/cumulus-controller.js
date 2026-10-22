@@ -110,7 +110,8 @@ export class CumulusController {
 
     // Cursor position relative to the canvas, or null when it is not over it
     this.cursor = null;
-    this.setCursorStyle = config.onCursorChange ?? ((cursor) => (this.canvas.style.cursor = cursor));
+    this.setCursorStyle =
+      config.onCursorChange ?? ((cursor) => (this.canvas.style.cursor = cursor));
     this.onMouseMove = (event) => {
       const point = this.canvasPoint(event);
       this.pointerMove(point.x, point.y);
@@ -121,8 +122,7 @@ export class CumulusController {
       this.pointerClick(point.x, point.y);
     };
     // The mouse is only followed if it can do something: push the cloud, or click it
-    this.followsMouse =
-      this.regenerateOnClick || (this.animate && this.theme.interaction.repel);
+    this.followsMouse = this.regenerateOnClick || (this.animate && this.theme.interaction.repel);
     if (this.followsMouse && (config.listenToCanvas ?? true)) {
       this.canvas.addEventListener("mousemove", this.onMouseMove);
       this.canvas.addEventListener("mouseleave", this.onMouseLeave);
@@ -324,7 +324,8 @@ export class CumulusController {
       if (day[key] !== undefined) oldKeyframes[0].shadowDiagonal[key] = day[key];
     }
     if (sunset.angle !== undefined) this.sunsetOptions.shadowAngle = sunset.angle;
-    if (sunset.xOriginOffset !== undefined) this.sunsetOptions.shadowXOriginOffset = sunset.xOriginOffset;
+    if (sunset.xOriginOffset !== undefined)
+      this.sunsetOptions.shadowXOriginOffset = sunset.xOriginOffset;
 
     this.sunsetKeyframes = createSunsetKeyframes(oldKeyframes[0], this.sunsetOptions);
     if (this.themeAnimation?.keyframes === oldKeyframes) {
@@ -396,8 +397,7 @@ export class CumulusController {
   }
 
   updateLoop() {
-    const shouldRun =
-      this.animate && this.inView && this.pageVisible && !this.destroyed;
+    const shouldRun = this.animate && this.inView && this.pageVisible && !this.destroyed;
 
     if (shouldRun && this.frameId === null) {
       this.lastTime = this.now(); // time spent paused does not count

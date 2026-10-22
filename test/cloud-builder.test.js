@@ -30,7 +30,9 @@ test("different seeds build different clouds", () => {
 // (The hashes were last changed on purpose when the unused random draws for the fractal
 // animation were removed: every seed then made a different cloud.)
 const hashOf = (builder) =>
-  createHash("sha1").update(JSON.stringify(snapshot(builder))).digest("hex");
+  createHash("sha1")
+    .update(JSON.stringify(snapshot(builder)))
+    .digest("hex");
 
 test("seed 323 still builds the same cloud (random call order is stable)", () => {
   assert.equal(hashOf(build(323)), "f5c6aa688cab25a951a70eca7381197afa6c72df");
@@ -46,11 +48,23 @@ test("with no minimum base width, seed 323 builds the cloud it should", () => {
 });
 
 test("the dome is small enough for the cloud to fit the canvas across as well as up", () => {
-  for (const [width, height] of [[600, 400], [500, 500], [300, 700], [800, 300], [900, 400]]) {
+  for (const [width, height] of [
+    [600, 400],
+    [500, 500],
+    [300, 700],
+    [800, 300],
+    [900, 400],
+  ]) {
     const { radius } = build(1, 15, width, height).dome;
     const { MIN_PADDING_RATIO, MAX_CELL_RADIUS } = CloudBuilder;
-    assert.ok(radius * (2 + 2 * MAX_CELL_RADIUS) <= width * (1 - MIN_PADDING_RATIO) + 1, `${width}x${height} too wide`);
-    assert.ok(radius * (1 + 2 * MAX_CELL_RADIUS) <= height * (1 - MIN_PADDING_RATIO) + 1, `${width}x${height} too tall`);
+    assert.ok(
+      radius * (2 + 2 * MAX_CELL_RADIUS) <= width * (1 - MIN_PADDING_RATIO) + 1,
+      `${width}x${height} too wide`,
+    );
+    assert.ok(
+      radius * (1 + 2 * MAX_CELL_RADIUS) <= height * (1 - MIN_PADDING_RATIO) + 1,
+      `${width}x${height} too tall`,
+    );
   }
   assert.equal(build(1, 15, 600, 400).dome.radius, 185); // was 200, from the height alone
 });
@@ -65,7 +79,8 @@ const baseWidth = (builder) => {
 
 test("the two cells at the base of the cloud are at least the minimum base width apart", () => {
   for (let seed = 0; seed < 60; seed++) {
-    for (const minBaseWidth of [0.5, 0.8, 1]) { // up to the dome radius always fits in the canvas
+    for (const minBaseWidth of [0.5, 0.8, 1]) {
+      // up to the dome radius always fits in the canvas
       const builder = build(seed, 15, 600, 400, { minBaseWidth });
       assert.ok(
         baseWidth(builder) >= minBaseWidth * builder.dome.radius,
@@ -79,7 +94,10 @@ test("the base cells are the lowest cell and one on the other side of the centre
   const builder = build(7);
   const [lowest, matched] = builder.bottomCellIds.map((id) => builder.cellsById.get(id));
   assert.equal(lowest.y + lowest.radius, matched.y + matched.radius);
-  assert.ok((lowest.sim.baseLocation.x - builder.dome.x) * (matched.sim.baseLocation.x - builder.dome.x) <= 0);
+  assert.ok(
+    (lowest.sim.baseLocation.x - builder.dome.x) * (matched.sim.baseLocation.x - builder.dome.x) <=
+      0,
+  );
 });
 
 test("the minimum base width only moves the cell it has to, and the default is the dome radius", () => {
@@ -94,9 +112,11 @@ test("the minimum base width only moves the cell it has to, and the default is t
     const a = build(seed, 15, 600, 400, { minBaseWidth: 0 });
     return baseWidth(a) >= a.dome.radius;
   });
-  assert.equal(hashOf(build(wideEnough, 15, 600, 400, { minBaseWidth: 0 })), hashOf(build(wideEnough)));
+  assert.equal(
+    hashOf(build(wideEnough, 15, 600, 400, { minBaseWidth: 0 })),
+    hashOf(build(wideEnough)),
+  );
 });
-
 
 test("cells can be looked up by id, even after sorting by size", () => {
   const builder = build();
@@ -107,7 +127,10 @@ test("cells can be looked up by id, even after sorting by size", () => {
   }
   // sorted largest first, so the array order is not the id order
   const radii = builder.cells.map((cell) => cell.radius);
-  assert.deepEqual(radii, [...radii].sort((a, b) => b - a));
+  assert.deepEqual(
+    radii,
+    [...radii].sort((a, b) => b - a),
+  );
 });
 
 test("fractals are grouped on the cell they belong to", () => {

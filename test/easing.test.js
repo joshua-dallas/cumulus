@@ -2,7 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { clamp01, easeInOutCubic, easeOutCubic } from "../src/lib/easing.js";
 
-for (const [name, ease] of [["easeOutCubic", easeOutCubic], ["easeInOutCubic", easeInOutCubic]]) {
+for (const [name, ease] of [
+  ["easeOutCubic", easeOutCubic],
+  ["easeInOutCubic", easeInOutCubic],
+]) {
   test(`${name} starts at 0, ends at 1 and never goes backwards`, () => {
     assert.equal(ease(0), 0);
     assert.equal(ease(1), 1);

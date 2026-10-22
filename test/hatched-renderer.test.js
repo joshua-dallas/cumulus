@@ -52,7 +52,11 @@ test("a segment placed inside another splits it in two", () => {
   const { renderer, line } = setup();
   renderer.addSegment(line.id, 40, 60, 1, false);
   const summary = line.segments.map((s) => [s.startX, s.endX]);
-  assert.deepEqual(summary, [[0, 40], [40, 60], [60, 100]]);
+  assert.deepEqual(summary, [
+    [0, 40],
+    [40, 60],
+    [60, 100],
+  ]);
 });
 
 test("padding is a gap beside the layer, on both sides", () => {
@@ -108,7 +112,12 @@ test("padding is drawn as paper; in shadow there is no padding, and what it clea
 
   renderer.hasShadowDiagonal = false;
   renderer.drawLine(line);
-  assert.deepEqual(drawnInOrder(), [[0, 40, "background"], [40, 60, 0], [60, 70, "paper"], [70, 100, "background"]]);
+  assert.deepEqual(drawnInOrder(), [
+    [0, 40, "background"],
+    [40, 60, 0],
+    [60, 70, "paper"],
+    [70, 100, "background"],
+  ]);
 
   // Everything left of x = 65 is in shadow, so the padding there (60 to 65) shows what it cleared
   drawn.length = 0;
@@ -129,7 +138,11 @@ test("padding is drawn as paper; in shadow there is no padding, and what it clea
   renderer.hasShadowDiagonal = false;
   renderer.paper = undefined;
   renderer.drawLine(line);
-  assert.deepEqual(drawnInOrder(), [[0, 40, "background"], [40, 60, 0], [70, 100, "background"]]);
+  assert.deepEqual(drawnInOrder(), [
+    [0, 40, "background"],
+    [40, 60, 0],
+    [70, 100, "background"],
+  ]);
 });
 
 test("edge noise is remembered per layer key, including an offset of 0", () => {
@@ -315,7 +328,14 @@ test("the top and bottom lines get line breaks in a random number of places", ()
   renderer.applyTheme(createTheme());
   renderer.finaliseRenderer();
 
-  const runs = (breaks) => breaks.join("").split("false").join(" ").trim().split(/ +/).filter((r) => r.includes("true")).length;
+  const runs = (breaks) =>
+    breaks
+      .join("")
+      .split("false")
+      .join(" ")
+      .trim()
+      .split(/ +/)
+      .filter((r) => r.includes("true")).length;
   const top = renderer.noise.lineBreaks[0];
   const bottom = renderer.noise.lineBreaks[renderer.lines.length - 1];
   for (const breaks of [top, bottom]) {

@@ -1,9 +1,4 @@
-import {
-  getVerticalLinesOfPolygon,
-  mixColours,
-  mulberry32,
-  perlinNoise1D,
-} from "./utils.js";
+import { getVerticalLinesOfPolygon, mixColours, mulberry32, perlinNoise1D } from "./utils.js";
 
 // TODO: Use typescript and custom types for layer, line and segment
 // TODO: Should I use get/set patterns to trigger re-render?
@@ -232,16 +227,12 @@ export class HatchedRenderer {
     // Uniform random variable per draw step
     this.noise.lightness = this.lines.map(() =>
       [...Array(numXSteps).keys()].map(() =>
-        Math.round(
-          (this.random() - 0.5) * HatchedRenderer.LIGHTNESS_NOISE_RANGE,
-        ),
+        Math.round((this.random() - 0.5) * HatchedRenderer.LIGHTNESS_NOISE_RANGE),
       ),
     );
     // This could also be saved as the uniform variable and check the threshold in draw
     this.noise.lineBreaks = this.lines.map(() =>
-      [...Array(numXSteps).keys()].map(
-        () => this.random() < HatchedRenderer.PROB_LINE_BREAK,
-      ),
+      [...Array(numXSteps).keys()].map(() => this.random() < HatchedRenderer.PROB_LINE_BREAK),
     );
     this.addEdgeLineBreaks();
   }
@@ -301,9 +292,7 @@ export class HatchedRenderer {
   }
 
   generateShadowDiagonalEdge() {
-    this.shadowDiagonalLocations = this.lines.map((line) =>
-      this.getShadowCrossingForLine(line),
-    );
+    this.shadowDiagonalLocations = this.lines.map((line) => this.getShadowCrossingForLine(line));
   }
 
   setBackgroundBorderNoise(noise) {
@@ -322,13 +311,7 @@ export class HatchedRenderer {
         rightOffset = this.noise.borderEdgeRight[line.id];
       }
 
-      this.addSegment(
-        line.id,
-        line.startX + leftOffset,
-        line.endX - rightOffset,
-        undefined,
-        true,
-      );
+      this.addSegment(line.id, line.startX + leftOffset, line.endX - rightOffset, undefined, true);
     }
   }
 
@@ -340,10 +323,7 @@ export class HatchedRenderer {
   // anything else, so a gap stays visible even if the layer it belongs to is
   // covered. A gap remembers what it cleared so that it can be skipped in shadow.
   addLayerSegment(line, startX, endX, layer) {
-    const leftGapStart = Math.max(
-      startX - (layer.leftPadding || 0),
-      line.startX,
-    );
+    const leftGapStart = Math.max(startX - (layer.leftPadding || 0), line.startX);
     if (leftGapStart < startX) {
       this.addSegment(line.id, leftGapStart, startX, layer.id, false, true);
     }
@@ -371,9 +351,7 @@ export class HatchedRenderer {
     for (const line of affectedLines) {
       // calculate the segment to add
       // Use the equation of the x axis intercepts of a circle
-      const sqrtTerm = Math.round(
-        Math.sqrt(config.radius ** 2 - (line.y - config.y) ** 2),
-      );
+      const sqrtTerm = Math.round(Math.sqrt(config.radius ** 2 - (line.y - config.y) ** 2));
       let startX = config.x - sqrtTerm;
       let endX = config.x + sqrtTerm;
 
@@ -452,18 +430,10 @@ export class HatchedRenderer {
     }
 
     if (layer.leftEdgeNoise) {
-      startX += this.getCachedEdgeOffset(
-        cached.left,
-        lineId,
-        layer.leftEdgeNoise,
-      );
+      startX += this.getCachedEdgeOffset(cached.left, lineId, layer.leftEdgeNoise);
     }
     if (layer.rightEdgeNoise) {
-      endX += this.getCachedEdgeOffset(
-        cached.right,
-        lineId,
-        layer.rightEdgeNoise,
-      );
+      endX += this.getCachedEdgeOffset(cached.right, lineId, layer.rightEdgeNoise);
     }
 
     return [startX, endX];
@@ -491,13 +461,7 @@ export class HatchedRenderer {
     // For each final segment, draw a line to the canvas
     const shadowRange = this.getShadowRange(line);
     for (const segment of line.segments) {
-      this.drawSegmentRange(
-        segment,
-        segment.startX,
-        segment.endX,
-        line,
-        shadowRange,
-      );
+      this.drawSegmentRange(segment, segment.startX, segment.endX, line, shadowRange);
     }
   }
 
@@ -516,7 +480,10 @@ export class HatchedRenderer {
     // The parts of the gap outside the shadow (one of the two is empty)
     if (this.paper) {
       const outside = shadowRange
-        ? [[x1, Math.min(x2, shadowRange.from)], [Math.max(x1, shadowRange.to), x2]]
+        ? [
+            [x1, Math.min(x2, shadowRange.from)],
+            [Math.max(x1, shadowRange.to), x2],
+          ]
         : [[x1, x2]];
       for (const [start, end] of outside) {
         if (end > start) this.drawSegment(start, end, line, segment);
@@ -549,11 +516,7 @@ export class HatchedRenderer {
       // Don't moveTo and lineTo the first point
       if (currentX > x1) {
         // Get the parameters for the next line section
-        const [colour, lineWidth, lineBreak] = this.getStrokeParameters(
-          currentX,
-          segment,
-          line,
-        );
+        const [colour, lineWidth, lineBreak] = this.getStrokeParameters(currentX, segment, line);
         yOffset = this.getWaveYOffset(currentX, segment, line);
 
         // Draw the current line section
@@ -582,11 +545,7 @@ export class HatchedRenderer {
 
     // Get the parameters for the final line section
     yOffset = this.getWaveYOffset(x2, segment, line);
-    const [colour, lineWidth, lineBreak] = this.getStrokeParameters(
-      currentX,
-      segment,
-      line,
-    );
+    const [colour, lineWidth, lineBreak] = this.getStrokeParameters(currentX, segment, line);
 
     if (lineBreak) return;
 
@@ -613,9 +572,7 @@ export class HatchedRenderer {
     // Apply the background line width gradient
     if (segment.isBackground) {
       lineWidth *=
-        ((line.id + 1) / this.lines.length) *
-          (this.backgroundLineWidthGradientDown - 1) +
-        1;
+        ((line.id + 1) / this.lines.length) * (this.backgroundLineWidthGradientDown - 1) + 1;
     }
 
     // Decide whether to add a line break at the current point
@@ -691,9 +648,7 @@ export class HatchedRenderer {
     // Remember: Positive y is down, but we have specified the angle from the x-axis
     // along the base of the dome
     const yFromBase = this.dome.y - y;
-    let shadowX =
-      yFromBase / Math.tan(this.shadowDiagonalAngle) +
-      this.shadowDiagonalXOrigin;
+    let shadowX = yFromBase / Math.tan(this.shadowDiagonalAngle) + this.shadowDiagonalXOrigin;
 
     // Apply the shadow diagonal edge noise for this line
     shadowX += this.noise.shadowDiagonal[line.id];
@@ -750,9 +705,7 @@ export class HatchedRenderer {
       // The right-hand remainder must be copied before the left one is trimmed,
       // as both can come from the same segment (the new one splits it in two)
       const rightRemainder =
-        lastOverlapped.endX > endX
-          ? { ...lastOverlapped, startX: endX }
-          : undefined;
+        lastOverlapped.endX > endX ? { ...lastOverlapped, startX: endX } : undefined;
 
       if (firstOverlapped.startX < startX) {
         firstOverlapped.endX = startX;
@@ -778,8 +731,7 @@ export class HatchedRenderer {
       const waveXNoise = this.noise.waveXOffset[line.id];
       const yOffsets = [...Array(numXSteps).keys()].map((step) =>
         Math.sin(
-          ((step * HatchedRenderer.DRAW_STEP + waveXNoise) * 2 * Math.PI) /
-            this.defaultWavePeriod,
+          ((step * HatchedRenderer.DRAW_STEP + waveXNoise) * 2 * Math.PI) / this.defaultWavePeriod,
         ),
       );
       this.baseYOffset[line.id] = yOffsets;
@@ -814,9 +766,6 @@ export class HatchedRenderer {
     // This does not change the start or end x values of the line segment
     const waveXNoise = this.noise.waveXOffset[line.id];
 
-    return (
-      Math.sin(((x + waveXNoise) * 2 * Math.PI) / wavePeriod) * waveAmplitude +
-      yNoise
-    );
+    return Math.sin(((x + waveXNoise) * 2 * Math.PI) / wavePeriod) * waveAmplitude + yNoise;
   }
 }

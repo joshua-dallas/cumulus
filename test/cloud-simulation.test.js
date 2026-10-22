@@ -24,8 +24,12 @@ test("the mouse does nothing unless repel is switched on", () => {
   const before = builder.cells.map((cell) => [cell.x, cell.y]);
   const cx = builder.dome.x;
   const cy = builder.dome.y - builder.dome.radius / 2;
-  for (let i = 0; i <= 20; i++) assert.equal(simulation.step({ x: cx - 150 + i * 15, y: cy }), false);
-  assert.deepEqual(builder.cells.map((cell) => [cell.x, cell.y]), before);
+  for (let i = 0; i <= 20; i++)
+    assert.equal(simulation.step({ x: cx - 150 + i * 15, y: cy }), false);
+  assert.deepEqual(
+    builder.cells.map((cell) => [cell.x, cell.y]),
+    before,
+  );
 });
 
 test("a cloud at rest with no cursor does not change", () => {

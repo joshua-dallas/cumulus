@@ -140,10 +140,7 @@ export function getVerticalLinesOfPolygon(vertices) {
   verticesCopy.push(vertices[0]);
 
   for (let i = 1; i < verticesCopy.length; i++) {
-    if (
-      verticesCopy[i - 1].x == verticesCopy[i].x &&
-      verticesCopy[i - 1].y != verticesCopy[i].y
-    ) {
+    if (verticesCopy[i - 1].x == verticesCopy[i].x && verticesCopy[i - 1].y != verticesCopy[i].y) {
       verticalLines.push({
         x: verticesCopy[i].x,
         y1: Math.min(verticesCopy[i - 1].y, verticesCopy[i].y),
@@ -167,9 +164,7 @@ export function getHorizontalLinesOfPolygon(vertices, verticesFilter) {
     if (
       verticesCopy[i - 1].y == verticesCopy[i].y &&
       verticesCopy[i - 1].x != verticesCopy[i].x &&
-      (verticesFilter
-        ? verticesFilter(verticesCopy[i - 1], verticesCopy[i])
-        : true)
+      (verticesFilter ? verticesFilter(verticesCopy[i - 1], verticesCopy[i]) : true)
     ) {
       horizontalLines.push({
         y: verticesCopy[i].y,

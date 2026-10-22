@@ -27,8 +27,9 @@ These block going public, or make the repo look unfinished or unsafe.
 ### Legal and safety
 
 - [ ] **Choose and add a licence.** `LICENCE` is an empty file. MIT is the usual choice for a portfolio library. Put the full text in, and rename the file to `LICENSE` (the spelling GitHub, npm and every tool look for first), add `"license": "MIT"` to `package.json`, and fill in the year and your name.
-- [ ] **Check the history for anything private.** A quick scan of the working tree found no keys or secrets. Also scan the whole history, since public means every commit is public (`git log -p | grep -iE 'key|secret|token|password'`, or run `gitleaks detect`). Commits carry `joshua.s.dallas@gmail.com` as the author address; if you do not want that public, switch to GitHub's `…@users.noreply.github.com` address for future commits (rewriting old history is possible but is not worth it for this alone).
-- [ ] **Fix the `npm audit` finding.** One high severity advisory, in `vite` 8.3.0–8.3.2 (dev server issues, so it affects development only, but it shows on the repo's security tab and in `npm audit`). `npm audit fix` should take it to a patched version; run the tests and a build afterwards.
+- [x] **Author email rewritten.** History was rewritten with `git filter-repo --mailmap` and force-pushed; every commit now uses the GitHub no-reply address.
+- [ ] **Scan the history for secrets.** A quick scan of the working tree found none. Also scan the whole history (`gitleaks detect`, or `git log -p | grep -iE 'key|secret|token|password'`), since public means every commit is public.
+- [x] **Fix the `npm audit` finding.** `npm audit` now reports 0 vulnerabilities.
 
 ### Package and install story
 
