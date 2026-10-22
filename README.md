@@ -48,7 +48,7 @@ Changing an attribute rebuilds the cloud (except `sunset` and `sunsetDuration`).
 | `width`             | 500     | Canvas width in CSS pixels. If omitted, the element's CSS width is used                                                      |
 | `height`            | 500     | Canvas height in CSS pixels. If omitted, the element's CSS height is used                                                    |
 | `numCells`          | 15      | Number of main circles forming the cloud (max 100)                                                                           |
-| `seed`              | 5       | Seed for the generator                                                                                                       |
+| `seed`              | random  | Seed for the generator (a random one if omitted; `currentSeed` tells you which)                                              |
 | `lineWidth`         | 1       | Hatch line thickness                                                                                                         |
 | `lineSpacing`       | 1.5     | Gap between hatch lines                                                                                                      |
 | `growIn`            | off     | The cloud grows from nothing when the element is first created                                                               |
@@ -96,7 +96,7 @@ A cloud is modelled as three kinds of shape, built by `CloudBuilder` (`src/lib/c
 - **Fills**: regions between cells (polygons and half-circles along the centre line) that are shaded differently.
 - **Fractals**: small light and dark circles inside each cell that give the fluffy look.
 
-`Cumulus` (`src/cumulus.js`) is the custom element and handles attributes, resizing and lifecycle. It creates a `CumulusController` (`src/lib/cumulus-controller.js`), which turns the cloud into styled layers (styles live in `src/lib/theme.js`), moves the cells with `CloudSimulation` and hands the layers to the renderer (`src/lib/hatched-renderer.js`). The renderer splits the canvas into horizontal lines, works out which layer is visible along each stretch of each line, and strokes each stretch as a wavy, noisy line, with a diagonal shadow edge across the cloud. See [CLAUDE.md](CLAUDE.md) for a detailed walkthrough.
+`Cumulus` (`src/cumulus.js`) is the custom element and handles attributes, resizing and lifecycle. It creates a `CumulusController` (`src/lib/cumulus-controller.js`), which turns the cloud into styled layers (styles live in `src/lib/theme.js`), moves the cells with `CloudSimulation` and hands the layers to the renderer (`src/lib/hatched-renderer.js`). The renderer splits the canvas into horizontal lines, works out which layer is visible along each stretch of each line, and strokes each stretch as a wavy, noisy line, with a diagonal shadow edge across the cloud. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed walkthrough.
 
 ## Development
 
@@ -108,10 +108,11 @@ npm run build:demo   # the demo page for GitHub Pages, in dist-demo/
 npm run lint         # ESLint
 npm run format       # Prettier (format:check only checks)
 npm test             # unit tests (no browser needed)
+npm run test:e2e     # the element in a real browser (Playwright; run `npx playwright install chromium` once)
 npm run check        # lint, format check, tests and build: what CI runs
 ```
 
-Tests use Node's built-in runner and run without a browser. The custom element itself (attributes, observers) is not covered yet, as it needs a DOM.
+The unit tests use Node's built-in runner and run without a browser. The custom element itself is tested in Chromium with Playwright (`e2e/`).
 
 The demo is deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` (the repository's Pages source must be set to "GitHub Actions").
 

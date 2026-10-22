@@ -9,6 +9,21 @@ export function mulberry32(seed) {
   };
 }
 
+// A number from 0 up to 1 that depends only on the seed, a piece of text and a whole
+// number. The same inputs always give the same number, whatever else has been asked
+// for before (unlike a random stream, which depends on the order of the calls)
+export function hashToUnit(seed, text, index) {
+  let hash = (seed >>> 0) ^ 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+  }
+  hash = Math.imul(hash ^ (index >>> 0), 0x85ebca6b);
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35);
+  hash ^= hash >>> 16;
+  return (hash >>> 0) / 4294967296;
+}
+
 // Smooth ease from 0 to 1 whose slope is 0 at both ends (Perlin's "fade").
 // It makes the noise flow through each node instead of kinking at it
 function fade(t) {

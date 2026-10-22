@@ -1,4 +1,10 @@
-import { getVerticalLinesOfPolygon, mixColours, mulberry32, perlinNoise1D } from "./utils.js";
+import {
+  getVerticalLinesOfPolygon,
+  hashToUnit,
+  mixColours,
+  mulberry32,
+  perlinNoise1D,
+} from "./utils.js";
 
 // Performance boosts
 // - Compute noise once and save
@@ -23,8 +29,17 @@ export class HatchedRenderer {
   // width and height are the logical (CSS pixel) size of the drawing area.
   // They are passed in, rather than measured from the canvas, so the renderer
   // does not depend on the canvas being laid out in the DOM.
-  // pixelRatio is the device pixels per CSS pixel. A worker has no window to read it from
-  constructor(canvas, width, height, lineWidth = 2, lineSpacing = 2, pixelRatio = undefined) {
+  // pixelRatio is the device pixels per CSS pixel. A worker has no window to read it from.
+  // seed decides all the noise: the same seed always gives the same picture
+  constructor(
+    canvas,
+    width,
+    height,
+    lineWidth = 2,
+    lineSpacing = 2,
+    pixelRatio = undefined,
+    seed = 10,
+  ) {
     this.canvas = canvas;
     this.pixelRatio = pixelRatio ?? globalThis.window?.devicePixelRatio ?? 1;
     this.width = width;
@@ -63,7 +78,7 @@ export class HatchedRenderer {
     this.shadowDiagonalEdgeNoise = 30;
 
     // Random number generation
-    this.seed = 10;
+    this.seed = seed;
     this.random = mulberry32(this.seed);
     this.noise = {
       // Edge noise is cached per layer key (not layer index) so that it stays
@@ -410,10 +425,10 @@ export class HatchedRenderer {
     }
 
     if (layer.leftEdgeNoise) {
-      startX += this.getCachedEdgeOffset(cached.left, lineId, layer.leftEdgeNoise);
+      startX += this.getCachedEdgeOffset(cached.left, lineId, layer.leftEdgeNoise, `${key}|left`);
     }
     if (layer.rightEdgeNoise) {
-      endX += this.getCachedEdgeOffset(cached.right, lineId, layer.rightEdgeNoise);
+      endX += this.getCachedEdgeOffset(cached.right, lineId, layer.rightEdgeNoise, `${key}|right`);
     }
 
     return [startX, endX];
@@ -422,10 +437,12 @@ export class HatchedRenderer {
   // The random value is cached, and scaled by range each time it is used. The
   // range can change (it shrinks with the cloud while it grows), but the noise
   // stays the same. An unset entry is undefined: 0 is a valid cached value
-  getCachedEdgeOffset(offsets, lineId, range) {
+  // The noise value depends only on the seed, the edge ("cell-4|left") and the line, never
+  // on which shapes were drawn first, so a cloud has the same edges however it got there
+  getCachedEdgeOffset(offsets, lineId, range, edge) {
     let unitNoise = offsets[lineId];
     if (unitNoise === undefined) {
-      unitNoise = this.random() - 0.5;
+      unitNoise = hashToUnit(this.seed, edge, lineId) - 0.5;
       offsets[lineId] = unitNoise;
     }
     return Math.round(unitNoise * range);
@@ -537,8 +554,14 @@ export class HatchedRenderer {
     this.context.stroke();
   }
 
+  // Which of the per-step noise values (see initialiseNoise) belongs to x. A stroke that
+  // ends exactly on the right edge of the canvas uses the last one
+  drawStepIndex(x) {
+    return Math.min(Math.floor(x / HatchedRenderer.DRAW_STEP), this.numXSteps - 1);
+  }
+
   getStrokeParameters(x1, segment, line) {
-    const xDrawStep = Math.floor(x1 / HatchedRenderer.DRAW_STEP);
+    const xDrawStep = this.drawStepIndex(x1);
 
     // Get the final colour of the section
     const colour = this.getStrokeColour(x1, segment, line);
@@ -562,7 +585,7 @@ export class HatchedRenderer {
   }
 
   getStrokeColour(x1, segment, line) {
-    const xDrawStep = Math.floor(x1 / HatchedRenderer.DRAW_STEP);
+    const xDrawStep = this.drawStepIndex(x1);
     // A gap is plain paper, with no noise
     if (segment.isGap) {
       return `hsl(${this.paper.hue}, ${this.paper.sat}%, ${this.paper.light}%)`;
@@ -713,7 +736,7 @@ export class HatchedRenderer {
   }
 
   getWaveYOffset(x, segment, line) {
-    const xDrawStep = Math.floor(x / HatchedRenderer.DRAW_STEP);
+    const xDrawStep = this.drawStepIndex(x);
     // Returns the y-offset to be applied at the specified x
     // To add the wave defined by wavePeriod and waveAmplitude
     let wavePeriod = this.defaultWavePeriod;

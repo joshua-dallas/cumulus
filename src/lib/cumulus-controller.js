@@ -14,6 +14,13 @@ import { clamp01, easeInOutCubic, easeOutCubic } from "./easing.js";
 // background tab would otherwise jump straight to the end when it resumes
 const MAX_FRAME_MS = 100;
 
+// The renderer's noise (line widths, lightness, y offsets) comes from the seed the
+// controller starts with, and stays the same when a click replaces the cloud. It is
+// offset, because the same seed would give the renderer the same random numbers as the
+// builder, and the builder's cell positions would line up with the noise
+const RENDERER_SEED_OFFSET = 0x9e3779b9;
+const rendererSeed = (seed) => seed + RENDERER_SEED_OFFSET;
+
 // Runs one cloud on one canvas: builds the cloud, turns it into renderer
 // layers, and drives the animation loop. It knows nothing about custom
 // elements or attributes (see cumulus.js); it is created with a finished
@@ -83,6 +90,7 @@ export class CumulusController {
       config.lineWidth,
       config.lineSpacing,
       config.pixelRatio,
+      rendererSeed(config.seed),
     );
     this.renderer.setDome(this.builder.dome); // the shadow is measured from it
     this.renderer.applyTheme(this.theme);

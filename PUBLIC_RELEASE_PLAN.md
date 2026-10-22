@@ -28,7 +28,7 @@ These block going public, or make the repo look unfinished or unsafe.
 
 - [x] (PolyForm Noncommercial 1.0.0, in `LICENSE`.) **Choose and add a licence.** `LICENCE` is an empty file. MIT is the usual choice for a portfolio library. Put the full text in, and rename the file to `LICENSE` (the spelling GitHub, npm and every tool look for first), add `"license": "MIT"` to `package.json`, and fill in the year and your name.
 - [x] **Author email rewritten.** History was rewritten with `git filter-repo --mailmap` and force-pushed; every commit now uses the GitHub no-reply address.
-- [ ] **Scan the history for secrets.** A quick scan of the working tree found none. Also scan the whole history (`gitleaks detect`, or `git log -p | grep -iE 'key|secret|token|password'`), since public means every commit is public.
+- [x] (Done: all clear.) **Scan the history for secrets.** A quick scan of the working tree found none. Also scan the whole history (`gitleaks detect`, or `git log -p | grep -iE 'key|secret|token|password'`), since public means every commit is public.
 - [x] **Fix the `npm audit` finding.** `npm audit` now reports 0 vulnerabilities.
 
 ### Package and install story
@@ -41,7 +41,7 @@ These block going public, or make the repo look unfinished or unsafe.
 
 The README is currently a developer's working notes: long attribute prose, then a roadmap full of ticked-off items and fixed bugs. A visitor needs something else first.
 
-- [ ] **Lead with a picture.** The README links `docs/screenshot.png`: add the image.
+- [x] (`docs/screenshot.png`.) **Lead with a picture.** The README links `docs/screenshot.png`: add the image.
 - [x] (`vite.demo.config.js` and `.github/workflows/pages.yml`; set the repo's Pages source to "GitHub Actions" and check the link works.) **Add a live demo link.** Deploy `demo/` to GitHub Pages (a small Vite config or build script for the demo, plus a GitHub Actions workflow). Link it at the top of the README and in the repo's "About" box. Note that the demo currently imports `../src/define.js` and only works through the dev server.
 - [x] **Restructure the README**: one-paragraph pitch, picture, demo link, install, quick start, attributes table, JS API (`currentSeed`, `seedchange`, `setShadowDiagonal`, `setThemeValues`, theming), "how it works" (short), browser support, development, licence. Keep the table of attributes (tidy its column alignment; Prettier will do it).
 - [x] (`ROADMAP.md`.) **Move the roadmap and history out of the README.** Put open items in GitHub Issues (or a `ROADMAP.md` of open items only), and delete the ticked-off list of past fixes: it is useful to you and noise to a visitor. The ~67 `// TODO` comments in the source are a backlog too; turn the real ones into issues and delete the rest, because a public repo with dozens of TODOs reads as unfinished.
@@ -59,7 +59,7 @@ The README is currently a developer's working notes: long attribute prose, then 
 
 - [x] (`.github/workflows/ci.yml`; add the status badge to the README once it has run on GitHub.) **Continuous integration**: one GitHub Actions workflow running `npm ci`, `npm run lint`, `npm run format:check`, `npm test` and `npm run build` on push and pull request. Add the status badge to the README. This is the best "adheres to best practices" signal for the least work.
 - [ ] **Set the GitHub repo up**: description, topics, website (the demo link), and a social preview image (the screenshot).
-- [ ] **Decide what to do with `CLAUDE.md`.** It is a very good architecture document, and also an instruction file for a coding assistant. Either keep it as-is (some visitors find it interesting that you work with an AI assistant; say so plainly in the README if you keep it), or move the architecture content to `docs/ARCHITECTURE.md`, link it from the README, and leave a short `CLAUDE.md` pointing at it. Note that some of its lines are addressed to the assistant (for example "Do not make code changes beyond the task asked"), not to contributors, so reread it with a stranger in mind.
+- [x] (Architecture moved to `docs/ARCHITECTURE.md`; `CLAUDE.md` keeps the rules.) **Decide what to do with `CLAUDE.md`.** It is a very good architecture document, and also an instruction file for a coding assistant. Either keep it as-is (some visitors find it interesting that you work with an AI assistant; say so plainly in the README if you keep it), or move the architecture content to `docs/ARCHITECTURE.md`, link it from the README, and leave a short `CLAUDE.md` pointing at it. Note that some of its lines are addressed to the assistant (for example "Do not make code changes beyond the task asked"), not to contributors, so reread it with a stranger in mind.
 - [ ] **Make the first public commit state clean**: `git status` empty, the build output (`dist/`) not committed, `package-lock.json` committed.
 
 ---
@@ -73,28 +73,28 @@ Worth doing, none of it blocks going public. Roughly in order of value.
 - [x] (Done for the element; the controller config, theme and renderer shapes are still untyped, and `checkJs` is off: turning it on gives about 280 errors, most of them untyped parameters.) **JSDoc on the public API and emit `.d.ts`.** Add JSDoc to the `Cumulus` element, the controller `config`, `createTheme`/the theme shape and the renderer's layer shape. Add `jsconfig.json`/`tsconfig.json` with `checkJs`, a `npm run typecheck` script (`tsc --noEmit`), and a declaration build step so `package.json` can have `types` and `exports.*.types`. Add typecheck to CI.
 - [ ] **Add the custom-element typings** (`HTMLElementTagNameMap` entry for `cumulus-canvas`) so TS users get the tag name and attributes.
 - [ ] **A real theming API** (already on the roadmap): a documented `theme` property or CSS custom properties, rather than `setThemeValues` only. Document it with a small example in the README.
-- [ ] **Randomise the seed when none is given** (roadmap item), so the default is not always the same cloud.
+- [x] (The element picks a random seed and keeps it through rebuilds.) **Randomise the seed when none is given** (roadmap item), so the default is not always the same cloud.
 
 ### Tests and quality
 
-- [ ] **Test the custom element itself** (attributes, rebuild batching, observers, reduced motion), with jsdom/happy-dom or Playwright. The element is the public surface and is the one thing with no automated test. A single Playwright smoke test (load the demo, the canvas has non-blank pixels, click changes the seed) would also double as an end-to-end test in CI.
+- [x] (Playwright, `e2e/`, run in CI.) **Test the custom element itself** (attributes, rebuild batching, observers, reduced motion), with jsdom/happy-dom or Playwright. The element is the public surface and is the one thing with no automated test. A single Playwright smoke test (load the demo, the canvas has non-blank pixels, click changes the seed) would also double as an end-to-end test in CI.
 - [ ] **Coverage report** (`node --test --experimental-test-coverage`), shown in CI output. No need for a badge.
 - [ ] **Visual regression for a few seeds** (render to PNG, compare with a stored image). It fits a generative project well and protects the "same seed, same cloud" promise from the renderer side as well as the builder side (the golden hash covers only the builder).
-- [ ] **Dependabot or Renovate** for dependency updates, and `npm audit` in CI.
+- [ ] **Dependabot or Renovate** for dependency updates. (`npm audit` now runs in CI and in `npm run check`.)
 
 ### Documentation
 
 - [ ] **A short "how the cloud is made" write-up with diagrams** (cells, extension lines, fills, fractals, then the hatching), possibly as a blog-style `docs/how-it-works.md` with images from each build step. This is the part of the project that best shows off your thinking; it is worth more to a reader than any amount of reformatting.
 - [ ] **A gallery**: a grid of a dozen seeds (with seed numbers) in the README or on the demo page.
 - [ ] **`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and PR templates.** Small, quick to add, and part of what GitHub's "community standards" checklist looks for. Keep CONTRIBUTING to a few lines: how to run, test, format, and the rule about `random()` call order.
-- [ ] **`.editorconfig`** and a `.vscode/extensions.json` recommending the Prettier and ESLint extensions (the `.gitignore` already allows that file).
+- [x] (`.editorconfig` and `.vscode/extensions.json`.) **`.editorconfig`** and a `.vscode/extensions.json` recommending the Prettier and ESLint extensions (the `.gitignore` already allows that file).
 - [ ] **Bundle size note**: report the gzip size of the built library and worker in the README (currently about 15 kB gzipped plus the worker).
 
 ### Code structure
 
 - [ ] **Split the biggest files** if they can be split along real seams: `hatched-renderer.js` (826 lines), `cloud-builder.js` (770) and `cumulus-controller.js` (568). For example, the builder's eleven generation steps could each live in a small module under `src/lib/builder/`. Only do it if it makes the code easier to read; the golden-hash test makes this safe, but it is a lot of churn, so do it after release.
-- [ ] **Move magic numbers to named constants / the theme** where the TODOs already ask for it.
-- [ ] **Resolve known gotchas** listed in `CLAUDE.md`: the renderer's hardcoded seed (`10`), the one-past-the-end noise index, and the unused `fractalSim` code. Each is a small, well-understood fix (the noise one changes the PRNG stream, so it changes existing output; do that deliberately).
+- [x] (Builder tuning numbers are `static` constants.) **Move magic numbers to named constants / the theme** where the TODOs already ask for it.
+- [x] **Resolve known gotchas** from the architecture notes: the one-past-the-end noise index is fixed and tested, the unused fractal animation is removed, and the renderer's noise now comes from the cloud's seed.
 - [ ] **Performance work** from the roadmap (batched strokes, redraw only affected lines, stop the rAF loop at rest) with before/after numbers in the README. "Measured, then faster" is a good story to have.
 
 ### Release

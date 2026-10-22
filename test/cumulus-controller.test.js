@@ -202,6 +202,46 @@ test("every layer style in the theme uses a colour that exists", () => {
   }
 });
 
+// ---- the renderer's noise comes from the seed -----------------------------------------------
+
+const noiseOf = (controller) => {
+  const { noise } = controller.renderer;
+  return {
+    yOffset: noise.yOffset,
+    lineWidth: noise.lineWidth,
+    lineBreaks: noise.lineBreaks,
+    lightness: noise.lightness,
+    borderEdgeLeft: noise.borderEdgeLeft,
+    shadowDiagonal: noise.shadowDiagonal,
+    shadowDiagonalLocations: controller.renderer.shadowDiagonalLocations,
+  };
+};
+
+test("the same seed gives the same noise, and a different seed different noise", () => {
+  const a = create({ seed: 5 }).controller;
+  const b = create({ seed: 5 }).controller;
+  const c = create({ seed: 6 }).controller;
+  assert.deepEqual(noiseOf(a), noiseOf(b));
+  assert.notDeepEqual(noiseOf(a).yOffset, noiseOf(c).yOffset);
+  assert.notEqual(a.renderer.seed, a.seed); // offset from the builder's seed
+});
+
+test("clicking the cloud gives it a new shape but keeps the line widths, lightness and y offsets", () => {
+  const { controller } = create({ regenerateOnClick: true, randomSeed: () => 4242 });
+  const before = structuredClone(noiseOf(controller));
+  const rendererSeed = controller.renderer.seed;
+  const cell = controller.builder.cells[0];
+
+  controller.pointerClick(cell.x, cell.y);
+  const { shrinkDuration, growDuration } = controller.theme.animation;
+  runFor(shrinkDuration + growDuration + 500);
+  assert.equal(controller.seed, 4242);
+  assert.equal(controller.scale, 1);
+
+  assert.equal(controller.renderer.seed, rendererSeed);
+  assert.deepEqual(noiseOf(controller), before);
+});
+
 // ---- grow in -------------------------------------------------------------------------------
 
 test("with growIn the cloud starts as nothing, grows with easing, and ends full size", () => {

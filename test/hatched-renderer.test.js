@@ -145,33 +145,38 @@ test("padding is drawn as paper; in shadow there is no padding, and what it clea
   ]);
 });
 
-test("edge noise is remembered per layer key, including an offset of 0", () => {
+test("edge noise is remembered per layer key, even if the layer has a different index", () => {
   const { renderer } = setup();
-  let draws = 0;
-  renderer.random = () => (draws++, 0.5); // 0.5 gives a noise offset of exactly 0
   const layer = { id: 0, key: "cell-1", leftEdgeNoise: 6, rightEdgeNoise: 6 };
 
-  assert.deepEqual(renderer.addEdgeNoise(10, 20, layer, 0), [10, 20]);
-  const drawsAfterFirst = draws;
-  assert.deepEqual(renderer.addEdgeNoise(10, 20, layer, 0), [10, 20]);
-  assert.equal(draws, drawsAfterFirst); // reused, not rolled again
-
-  // The same key gives the same noise even if the layer has a different index next frame
-  renderer.addEdgeNoise(10, 20, { ...layer, id: 7 }, 0);
-  assert.equal(draws, drawsAfterFirst);
+  const first = renderer.addEdgeNoise(10, 20, layer, 0);
+  assert.deepEqual(renderer.addEdgeNoise(10, 20, layer, 0), first);
+  assert.deepEqual(renderer.addEdgeNoise(10, 20, { ...layer, id: 7 }, 0), first);
+  assert.equal(renderer.noise.layerEdge.size, 1);
 });
 
 test("edge noise scales with its range without being rolled again", () => {
   const { renderer } = setup();
-  let draws = 0;
-  renderer.random = () => (draws++, 0.9); // a noise value of +0.4 of the range
-  const layer = { id: 0, key: "cell-1", rightEdgeNoise: 10 };
+  const layer = { id: 0, key: "cell-1", leftEdgeNoise: 100, rightEdgeNoise: 100 };
+  const big = renderer.addEdgeNoise(0, 0, layer, 0);
+  const small = renderer.addEdgeNoise(0, 0, { ...layer, leftEdgeNoise: 50, rightEdgeNoise: 50 }, 0);
+  small.forEach((offset, i) => assert.ok(Math.abs(offset - big[i] / 2) <= 0.5)); // same noise, half the range
+  assert.ok(big.some((offset) => offset !== 0));
+});
 
-  assert.deepEqual(renderer.addEdgeNoise(10, 20, layer, 0), [10, 24]);
-  // The same layer while the cloud is small has a smaller range: same noise, smaller offset
-  const small = { ...layer, rightEdgeNoise: 5 };
-  assert.deepEqual(renderer.addEdgeNoise(10, 20, small, 0), [10, 22]);
-  assert.equal(draws, 1);
+test("edge noise depends on the seed, the edge and the line, not on what was drawn before", () => {
+  const edges = (seed, order) => {
+    const renderer = new HatchedRenderer(mockCanvas(), 100, 50, 1, 1.5, undefined, seed);
+    const layer = { id: 0, key: "cell-1", leftEdgeNoise: 1000, rightEdgeNoise: 1000 };
+    const result = {};
+    for (const lineId of order) result[lineId] = renderer.addEdgeNoise(0, 0, layer, lineId);
+    return result;
+  };
+  assert.deepEqual(edges(7, [0, 1, 2, 3]), edges(7, [3, 1, 0, 2]));
+  assert.notDeepEqual(edges(7, [0, 1, 2, 3]), edges(8, [0, 1, 2, 3]));
+  const { 0: line0, 1: line1 } = edges(7, [0, 1]);
+  assert.notDeepEqual(line0, line1);
+  assert.notEqual(line0[0], line0[1]); // left and right edges differ
 });
 
 test("line width noise is smooth Perlin noise within the noise range", () => {
@@ -342,4 +347,50 @@ test("the top and bottom lines get line breaks in a random number of places", ()
     assert.ok(breaks.filter(Boolean).length >= HatchedRenderer.EDGE_LINE_BREAK_MIN_WIDTH / 2 - 1);
     assert.ok(runs(breaks) >= 1);
   }
+});
+
+// A context that records everything the renderer sets on it and every point it draws to
+function recordingCanvas() {
+  const canvas = mockCanvas();
+  const record = { lineWidths: [], strokeStyles: [], points: [] };
+  const context = {
+    set lineWidth(value) {
+      record.lineWidths.push(value);
+    },
+    set strokeStyle(value) {
+      record.strokeStyles.push(value);
+    },
+    moveTo: (x, y) => record.points.push([x, y]),
+    lineTo: (x, y) => record.points.push([x, y]),
+  };
+  canvas.getContext = () =>
+    new Proxy(context, { get: (target, name) => (name in target ? target[name] : () => {}) });
+  return { canvas, record };
+}
+
+// Every stroke, including the last one that reaches the right edge, needs a real width,
+// colour and position. A noise value looked up past the end of its array is undefined,
+// which turns all three into NaN (the canvas then ignores them).
+for (const width of [100, 101, 600]) {
+  test(`drawing a ${width}px wide cloud never uses a noise value that does not exist`, () => {
+    const { canvas, record } = recordingCanvas();
+    const renderer = new HatchedRenderer(canvas, width, 40, 1, 1.5);
+    renderer.generateLines();
+    renderer.applyTheme(createTheme());
+    renderer.finaliseRenderer();
+    renderer.draw();
+
+    assert.ok(record.lineWidths.length > 0);
+    assert.ok(record.lineWidths.every(Number.isFinite), "a line width is not a number");
+    assert.ok(record.points.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)));
+    assert.ok(record.strokeStyles.every((style) => !String(style).includes("NaN")));
+  });
+}
+
+test("the noise for the right edge of the canvas is the last value, not one past it", () => {
+  const renderer = new HatchedRenderer(mockCanvas(), 100, 40, 1, 1.5);
+  assert.equal(renderer.drawStepIndex(0), 0);
+  assert.equal(renderer.drawStepIndex(99), 49);
+  assert.equal(renderer.drawStepIndex(100), renderer.numXSteps - 1);
+  assert.equal(renderer.drawStepIndex(250), renderer.numXSteps - 1);
 });

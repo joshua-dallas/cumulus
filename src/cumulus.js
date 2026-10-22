@@ -5,13 +5,13 @@ const DEFAULTS = {
   width: 500,
   height: 500,
   numCells: 15,
-  seed: 5,
   lineWidth: 1,
   lineSpacing: 1.5,
   sunsetDuration: 6000, // ms
 };
 
 const RESIZE_DEBOUNCE_MS = 150;
+const RANDOM_SEED_RANGE = 1e6; // A cloud with no seed attribute gets a seed below this
 
 /**
  * The edge of the shadow on the cloud. Angles are in radians.
@@ -103,6 +103,9 @@ export class Cumulus extends HTMLElement {
     this.size = null; // The size the current cloud was built with
     /** @internal @type {boolean} */
     this.hasBuilt = false; // Grow-in only plays the first time
+    // Used while there is no seed attribute. Chosen once, so a rebuild keeps the cloud
+    /** @internal @type {number} */
+    this.randomSeed = Math.floor(Math.random() * RANDOM_SEED_RANGE);
     /** @internal @type {number | null} */
     this.seedOverride = null; // The seed of a cloud made by clicking, kept across rebuilds
     /** @internal @type {ShadowDiagonalSettings} */
@@ -234,7 +237,7 @@ export class Cumulus extends HTMLElement {
       height,
       numCells: Math.max(1, Math.floor(this.numberAttribute("numcells", DEFAULTS.numCells))),
       // A cloud made by clicking keeps its seed if the element is rebuilt (resized)
-      seed: this.seedOverride ?? this.numberAttribute("seed", DEFAULTS.seed),
+      seed: this.seedOverride ?? this.numberAttribute("seed", this.randomSeed),
       lineWidth: this.positiveAttribute("linewidth", DEFAULTS.lineWidth),
       lineSpacing: Math.max(0, this.numberAttribute("linespacing", DEFAULTS.lineSpacing)),
       animate: !this.reducedMotionQuery.matches,

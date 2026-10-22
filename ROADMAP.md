@@ -1,6 +1,6 @@
 # Roadmap
 
-What is done and what is planned for Cumulus. The detailed design is in [CLAUDE.md](CLAUDE.md).
+What is done and what is planned for Cumulus. The detailed design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Changing how a cloud is generated (`CloudBuilder`) changes the cloud every existing seed makes. Items marked **(changes seeds)** do that, so do them deliberately and update the golden hash in `test/cloud-builder.test.js`.
 
@@ -9,11 +9,12 @@ Changing how a cloud is generated (`CloudBuilder`) changes the cloud every exist
 - [ ] **Line breaks that eat into adjacent lines.** Horizontal line breaks (gaps in a line) should be able to spread into the lines above and below, mainly along the bottom of the cloud and the top and bottom border of the canvas.
 - [ ] **Keep the cloud inside the canvas.** The dome radius fits the canvas across as well as up, which cut the clouds that overflow on 600x400 from about 6% to about 1% of seeds (worst 13px over). Portrait and square canvases still have about 1% overflow (worst 10px). To remove the rest: fit the cloud to the canvas after it is built (only changes the clouds that overflow).
 - [ ] **Morph on click.** Morph the old cloud into the new one on click, without shrinking away first.
-- [ ] **More vertical mouse movement.** Needs the fills to survive it, most likely by building the fill per scanline from the cells each frame (moving cells vertically tears the fills; see CLAUDE.md). Also: touch support through pointer events.
+- [ ] **More vertical mouse movement.** Needs the fills to survive it, most likely by building the fill per scanline from the cells each frame (moving cells vertically tears the fills; see docs/ARCHITECTURE.md). Also: touch support through pointer events.
 - [ ] **More realistic growth.** Growth is a uniform scale about the base; cells could grow at different times, rise and billow individually.
 - [ ] **More realistic clouds.** Shade by light direction, and make growth, rising, drift and dissipation behave more like real cumulus.
 - [ ] **Theming API.** `setThemeValues` changes colours and layer styles. Still to do: a `theme` property or CSS custom properties.
-- [ ] **Randomise the seed when none is given** (the default seed is always 5; 323 is a good one) and use the element's seed for the renderer's noise (it is hardcoded to 10).
+- [x] The renderer's noise comes from the seed the element starts with (offset from it). A click changes the cloud's shape but keeps the line widths, lightness and y offsets.
+- [x] Randomise the seed when none is given (the element picks one, and keeps it through rebuilds).
 - [ ] **Smaller padding and noise for small screens** (phones), as a separate theme.
 - [x] Rebuild on attribute change (`observedAttributes`, `ResizeObserver`, one `rebuild()`).
 - [x] Grow-in animation (`growIn` attribute).
@@ -42,15 +43,28 @@ Changing how a cloud is generated (`CloudBuilder`) changes the cloud every exist
 ## Package and project
 
 - [ ] **Publish to npm.** The package is installed from GitHub for now. To move: `npm login`, then `npm publish --access public`, change the README Install section to `npm install @joshua-dallas/cumulus`. (`prepare` also runs before `npm publish`, so `dist/` is built then too.)
-- [ ] Tests for the custom element (needs a DOM, e.g. jsdom or a browser).
+- [x] Tests for the custom element, in Chromium with Playwright (`e2e/`).
 - [ ] Types: JSDoc typedefs for the controller config, the theme and the renderer's layer, line and segment shapes; then turn on `checkJs`.
+- [ ] A coverage report (`node --test --experimental-test-coverage`) shown in the CI output.
+- [ ] Visual regression: render a few seeds to images and compare them with stored ones (the golden hash only covers the builder's geometry).
+- [ ] Dependabot or Renovate for dependency updates.
+- [ ] Split the biggest files along real seams (`hatched-renderer.js`, `cloud-builder.js`, `cumulus-controller.js`), for example the builder's generation steps into small modules.
+- [ ] Tag a release with a changelog, and pin the repo on the GitHub profile.
 - [ ] A `HTMLElementTagNameMap` entry so TypeScript knows `cumulus-canvas`.
 - [ ] Opt-in debugging: an `onDebug` callback (config option, and an event or property on the element) that receives diagnostic messages, so the library stays silent by default and has no `console.log` calls.
 - [x] Lint, format, type declarations, CI and a GitHub Pages demo.
+- [x] `.editorconfig` and recommended VS Code extensions.
 - [x] Unit tests for the builder, simulation, renderer and controller.
 - [x] Licence: PolyForm Noncommercial 1.0.0.
 - [x] Package metadata (description, author, licence, homepage, engines, files).
 - [x] Cells addressed by id, theme object, separate simulation, element and controller modules, padding as part of a layer, edge noise cached per layer, Perlin noise for line width.
+
+## Documentation
+
+- [ ] A "how a cloud is made" write-up with diagrams (cells, extension lines, fills, fractals, then the hatching), with an image from each build step.
+- [ ] A gallery of a dozen seeds, with their seed numbers, in the README or on the demo page.
+- [ ] `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and issue and pull request templates.
+- [ ] Report the gzip size of the built library and the worker in the README.
 
 ## Ideas from the source
 
@@ -78,17 +92,19 @@ These were `// TODO` comments in the code. They are grouped by where they were.
 - [x] Higher chance of line breaks, and longer ones, on the first and last line.
 - [x] Line width gradient down the background.
 - [x] Compute the y offsets once before drawing.
+- [x] The noise lookup for a stroke that ends on the right edge no longer reads past the end of the arrays (`drawStepIndex`).
 
 ### Builder (`cloud-builder.js`) (all of these change seeds unless they only rename or move code)
 
 - [ ] Extra padding so cells can grow and rise.
 - [ ] Flag which lines changed between animation frames.
 - [ ] Random `upperExtension` and `lowerExtension` for a cell.
-- [ ] Stepped child cells: move `probOfSteppedChild` to the top of the file and randomise `childRadiusRatio`.
-- [ ] Fractals: better names, constants at the top of the file, a fractal count that depends on the cell radius, a minimum distance and a limit on the largest radius, a random shadow angle for the light fractals, better angle ranges, and a check that the direction of y is right for the lower-right `rightPadding`.
+- [ ] Randomise the radius ratio of stepped child cells.
+- [ ] Fractals: better names, a fractal count that depends on the cell radius, a minimum distance and a limit on the largest radius, a random shadow angle for the light fractals, better angle ranges, and a check that the direction of y is right for the lower-right `rightPadding`.
 - [ ] Check whether the cloud looks better without sorting fractals largest to smallest.
-- [ ] Fill circles on horizontal edges: constants and better names (`maxStraightFillLength` may be too large), and a number of circles that depends on the edge length.
+- [ ] Fill circles on horizontal edges: a better name for the maximum straight length (it may be too large), and a number of circles that depends on the edge length.
 - [ ] Better names in `fillCentreLineGaps`, and note where horizontal breaks could be removed if wanted.
+- [x] Tuning numbers (stepped children, fractals, fill circles, the per-cell simulation settings) are named `static` constants at the top of `CloudBuilder`.
 - [x] Centre the cloud on the dome (`centreCells` centres the middle of the extents, not a weighted centre).
 
 ### Simulation, controller and utilities

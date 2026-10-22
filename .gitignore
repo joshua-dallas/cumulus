@@ -28,3 +28,7 @@ coverage/
 
 # Demo site build
 dist-demo/
+
+# Playwright
+test-results/
+playwright-report/

@@ -18,6 +18,35 @@ export class CloudBuilder {
   static MIN_CELL_RADIUS = 0.1; // Minimum cell radius as a fraction of the dome radius
   static MAX_CELL_RADIUS = 0.3; // Maximum cell radius as a fraction of the dome radius
 
+  // Stepped children: smaller cells beside a cell, with their baselines aligned
+  static STEPPED_CHILD_PROBABILITY = 0.5; // Chance that a cell has stepped children
+  static STEPPED_CHILD_COUNT = 2;
+  static STEPPED_CHILD_OFFSET_RATIO = 0.9; // Spacing between parent and child centres, ratio of parent radius
+  static STEPPED_CHILD_RADIUS_RATIO = 0.5; // Radius of a child, ratio of its parent's (compounding)
+
+  // Light fractals: mid-grey highlights on a cell
+  static LIGHT_FRACTALS_PER_CELL = 20;
+  static LIGHT_FRACTAL_MIN_RADIUS_RATIO = 0.2; // Ratio of fractal radius to cell radius
+  static LIGHT_FRACTAL_MAX_RADIUS_RATIO = 0.45;
+  static LIGHT_FRACTAL_MIN_RIGHT_PADDING = 4; // px, for fractals on the lower right of a cell
+  static LIGHT_FRACTAL_MAX_RIGHT_PADDING = 6;
+  static LIGHT_FRACTAL_SHADOW_ANGLE = -Math.PI / 4; // Fractals below this angle get right padding
+
+  // Dark fractals: shading on the upper left of a cell
+  static DARK_FRACTALS_PER_CELL = 15;
+  static DARK_FRACTAL_PROBABILITY = 0.4; // Not every cell has dark fractals
+  static DARK_FRACTAL_MIN_RADIUS_RATIO = 0.15; // Ratio of fractal radius to cell radius
+  static DARK_FRACTAL_MAX_RADIUS_RATIO = 0.25;
+  static DARK_FRACTAL_MIN_DISTANCE = 0.5; // Fraction of cell radius
+
+  // Circles along long horizontal fill edges
+  static FILL_CIRCLE_MAX_STRAIGHT_LENGTH = 0.3; // Ratio of dome radius: longer edges get circles
+  static FILL_CIRCLES_PER_EDGE = 12;
+
+  // Settings for the simulation, stored on each cell
+  static CELL_RETURN_SPEED = 0.02; // Fraction of the distance back to the base covered each frame
+  static CELL_CURSOR_RADIUS_RATIO = 3; // How close the cursor must be to push a cell, ratio of its radius
+
   // options is the cloud part of a theme (see theme.js):
   //   minBaseWidth: the least distance between the middles of the two cells at the
   //   base of the cloud, as a multiple of the dome radius. 0 is no minimum
@@ -108,9 +137,9 @@ export class CloudBuilder {
 
   generateCellSimParams(cell) {
     return {
-      speed: 0.02,
+      speed: CloudBuilder.CELL_RETURN_SPEED,
       baseLocation: { x: cell.x, y: cell.y },
-      cursorRadius: cell.radius * 3,
+      cursorRadius: cell.radius * CloudBuilder.CELL_CURSOR_RADIUS_RATIO,
     };
   }
 
@@ -389,28 +418,25 @@ export class CloudBuilder {
   }
 
   addSteppedChildCells() {
-    const probOfSteppedChild = 0.5;
-    const childXOffsetRadio = 0.9; // Spacing between parent and child centres, ratio of parent radius
-    const childRadiusRatio = 0.5;
-    const numberOfChildren = 2;
     // Using a random number, decide whether each cell will have stepped children
     const originalCellCount = this.cells.length;
     for (let i = 0; i < originalCellCount; i++) {
       const cell = this.cells[i];
-      if (this.random() < probOfSteppedChild) {
+      if (this.random() < CloudBuilder.STEPPED_CHILD_PROBABILITY) {
         // For each cell with stepped children, determine which side it is on
         const side = cell.x >= this.dome.x ? 1 : -1;
 
         // Add stepped children with matching baselines
-        for (let i = 0; i < numberOfChildren; i++) {
+        for (let i = 0; i < CloudBuilder.STEPPED_CHILD_COUNT; i++) {
           const xOffset =
             side * // Move left or right
             cell.radius *
-            //childRadiusRatio ** i * // For each stepped child, move based on the radius of the past child
-            childXOffsetRadio *
+            CloudBuilder.STEPPED_CHILD_OFFSET_RATIO *
             (i + 1);
 
-          const radius = Math.round(cell.radius * childRadiusRatio ** (i + 1));
+          const radius = Math.round(
+            cell.radius * CloudBuilder.STEPPED_CHILD_RADIUS_RATIO ** (i + 1),
+          );
           const x = Math.round(cell.x + xOffset);
           const y = cell.y + cell.radius - radius; // Align the baselines
 
@@ -450,11 +476,9 @@ export class CloudBuilder {
   }
 
   generateLightFractalsForCell(cell) {
-    const numberOfFractals = 20;
-
     // Generate fractal circles
     let lightFractalCircles = [];
-    for (let i = 0; i < numberOfFractals; i++) {
+    for (let i = 0; i < CloudBuilder.LIGHT_FRACTALS_PER_CELL; i++) {
       lightFractalCircles.push(this.generateLightFractalCircle(cell));
     }
 
@@ -465,14 +489,11 @@ export class CloudBuilder {
   }
 
   generateDarkFractalsForCell(cell) {
-    const numberOfFractals = 15;
-    const probOfDarkFractals = 0.4; // Not every cell will have dark fractals
-
-    if (this.random() > probOfDarkFractals) return [];
+    if (this.random() > CloudBuilder.DARK_FRACTAL_PROBABILITY) return [];
 
     // Generate fractal circles
     let darkFractalCircles = [];
-    for (let i = 0; i < numberOfFractals; i++) {
+    for (let i = 0; i < CloudBuilder.DARK_FRACTALS_PER_CELL; i++) {
       darkFractalCircles.push(this.generateDarkFractalCircle(cell));
     }
 
@@ -483,12 +504,6 @@ export class CloudBuilder {
   }
 
   generateLightFractalCircle(cell) {
-    const minRadiusRatio = 0.2; // Ratio of fractal radius to cell radius
-    const maxRadiusRatio = 0.45;
-    const minRightPadding = 4;
-    const maxRightPadding = 6;
-    const shadowAngle = -Math.PI / 4;
-
     const angle = ((this.random() * 3) / 2) * Math.PI - Math.PI / 2;
     const dist = this.random() * cell.radius;
 
@@ -497,15 +512,22 @@ export class CloudBuilder {
     const y = Math.round(-dist * Math.sin(angle));
 
     const radius = Math.round(
-      cell.radius * (this.random() * (maxRadiusRatio - minRadiusRatio) + minRadiusRatio),
+      cell.radius *
+        this.randomBetween(
+          CloudBuilder.LIGHT_FRACTAL_MIN_RADIUS_RATIO,
+          CloudBuilder.LIGHT_FRACTAL_MAX_RADIUS_RATIO,
+        ),
     );
 
     // If the fractal circle is below a certain angle,
     // it is at the bottom of the cell and should be less bright
     let rightPadding = 0;
-    if (angle > shadowAngle) {
+    if (angle > CloudBuilder.LIGHT_FRACTAL_SHADOW_ANGLE) {
       rightPadding = Math.round(
-        this.random() * (maxRightPadding - minRightPadding) + minRightPadding,
+        this.randomBetween(
+          CloudBuilder.LIGHT_FRACTAL_MIN_RIGHT_PADDING,
+          CloudBuilder.LIGHT_FRACTAL_MAX_RIGHT_PADDING,
+        ),
       );
     }
 
@@ -519,19 +541,22 @@ export class CloudBuilder {
   }
 
   generateDarkFractalCircle(cell) {
-    const minRadiusRatio = 0.15; // Ratio of fractal radius to cell radius
-    const maxRadiusRatio = 0.25;
-    const minDist = 0.5; // Fraction of cell radius
-
     const angle = ((this.random() * 2) / 3) * Math.PI + Math.PI * (2 / 3);
-    const dist = (this.random() * (1 - minDist) + minDist) * cell.radius;
+    const dist =
+      (this.random() * (1 - CloudBuilder.DARK_FRACTAL_MIN_DISTANCE) +
+        CloudBuilder.DARK_FRACTAL_MIN_DISTANCE) *
+      cell.radius;
 
     // x and y are relative to the cell position
     const x = Math.round(dist * Math.cos(angle));
     const y = Math.round(-dist * Math.sin(angle));
 
     const radius = Math.round(
-      cell.radius * (this.random() * (maxRadiusRatio - minRadiusRatio) + minRadiusRatio),
+      cell.radius *
+        this.randomBetween(
+          CloudBuilder.DARK_FRACTAL_MIN_RADIUS_RATIO,
+          CloudBuilder.DARK_FRACTAL_MAX_RADIUS_RATIO,
+        ),
     );
 
     return {
@@ -549,9 +574,6 @@ export class CloudBuilder {
   }
 
   addFillCirclesToHorzontalsAux(side) {
-    const maxStraightFillLength = 0.3; // Ratio of dome radius.
-    const numberOfCircles = 12;
-
     let polygon;
     if (side == "left") {
       polygon = this.cloudInnerLeft;
@@ -570,8 +592,8 @@ export class CloudBuilder {
     // Based on the length of the horizontal fill,
     // Choose a random number of circles to create.
     for (const line of horizontalLines) {
-      if (line.x2 - line.x1 > this.dome.radius * maxStraightFillLength) {
-        for (let i = 0; i < numberOfCircles; i++) {
+      if (line.x2 - line.x1 > this.dome.radius * CloudBuilder.FILL_CIRCLE_MAX_STRAIGHT_LENGTH) {
+        for (let i = 0; i < CloudBuilder.FILL_CIRCLES_PER_EDGE; i++) {
           // Create the circles at random positions along the line with random radius
           // Link to the cell that formed the horizontal line
           const x = Math.round(this.random() * (line.x2 - line.x1) + line.x1);
@@ -600,6 +622,11 @@ export class CloudBuilder {
         }
       }
     }
+  }
+
+  // A random number from min up to max
+  randomBetween(min, max) {
+    return this.random() * (max - min) + min;
   }
 
   randomCellRadius() {

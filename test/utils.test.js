@@ -10,6 +10,7 @@ import {
   perlinNoise1D,
   lerp,
   mixColours,
+  hashToUnit,
 } from "../src/lib/utils.js";
 
 test("mulberry32 gives the same sequence for the same seed", () => {
@@ -165,4 +166,25 @@ test("mixColours takes the shortest way round the colour wheel", () => {
   // Blue to orange, with the orange just past red: through purple, not through green
   const mid = mixColours({ hue: 206, sat: 50, light: 50 }, { hue: 20, sat: 50, light: 50 }, 0.5);
   assert.equal(mid.hue, 293);
+});
+
+test("hashToUnit is always the same for the same inputs, and between 0 and 1", () => {
+  assert.equal(hashToUnit(1, "cell-1|left", 4), hashToUnit(1, "cell-1|left", 4));
+  for (let i = 0; i < 1000; i++) {
+    const value = hashToUnit(i, "cell-1|left", i);
+    assert.ok(value >= 0 && value < 1);
+  }
+});
+
+test("hashToUnit changes with the seed, the text and the number, and is spread out evenly", () => {
+  const base = hashToUnit(1, "cell-1|left", 4);
+  assert.notEqual(base, hashToUnit(2, "cell-1|left", 4));
+  assert.notEqual(base, hashToUnit(1, "cell-1|right", 4));
+  assert.notEqual(base, hashToUnit(1, "cell-1|left", 5));
+
+  const values = Array.from({ length: 4000 }, (_, i) => hashToUnit(7, "cell-3|right", i));
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+  assert.ok(Math.abs(mean - 0.5) < 0.03);
+  const lowerThird = values.filter((v) => v < 1 / 3).length / values.length;
+  assert.ok(Math.abs(lowerThird - 1 / 3) < 0.04);
 });
