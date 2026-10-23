@@ -6,9 +6,11 @@ import { CloudBuilder } from "../src/lib/cloud-builder.js";
 const build = (seed = 323, numCells = 15, width = 600, height = 400, options) =>
   new CloudBuilder(width, height, numCells, seed, options);
 
-// Everything the builder generates, as plain data
+// Everything the builder generates, as plain data. The settings stored on each cell for the
+// simulation (return speed, cursor radius) are tuning, not generation, so they are left out
+// and a change to them does not change the hash
 const snapshot = (builder) => ({
-  cells: builder.cells,
+  cells: builder.cells.map(({ sim, ...cell }) => ({ ...cell, baseLocation: sim.baseLocation })),
   fillCircles: builder.fillCircles,
   horizontalFillCircles: builder.horizontalFillCircles,
   cloudInnerLeft: builder.cloudInnerLeft,
@@ -27,15 +29,29 @@ test("different seeds build different clouds", () => {
 // how clouds are generated, every existing seed now gives a different cloud:
 // update the hash on purpose. If you did not mean to change clouds, you have
 // added, removed or reordered a this.random() call in CloudBuilder.
-// (The hashes were last changed on purpose when the unused random draws for the fractal
-// animation were removed: every seed then made a different cloud.)
+// (The hashes changed on purpose when the unused random draws for the fractal animation were
+// removed: every seed then made a different cloud. They were re-recorded once more when the
+// simulation settings were left out of the snapshot: the clouds did not change.)
 const hashOf = (builder) =>
   createHash("sha1")
     .update(JSON.stringify(snapshot(builder)))
     .digest("hex");
 
 test("seed 323 still builds the same cloud (random call order is stable)", () => {
-  assert.equal(hashOf(build(323)), "f5c6aa688cab25a951a70eca7381197afa6c72df");
+  assert.equal(hashOf(build(323)), "d2af6035d258fa3a334d93533f2e4483081a671f");
+});
+
+test("simulation settings stored on the cells are not part of the seed's hash", () => {
+  const speed = CloudBuilder.CELL_RETURN_SPEED;
+  const radius = CloudBuilder.CELL_CURSOR_RADIUS_RATIO;
+  try {
+    CloudBuilder.CELL_RETURN_SPEED = speed * 2;
+    CloudBuilder.CELL_CURSOR_RADIUS_RATIO = radius + 1;
+    assert.equal(hashOf(build(323)), "d2af6035d258fa3a334d93533f2e4483081a671f");
+  } finally {
+    CloudBuilder.CELL_RETURN_SPEED = speed;
+    CloudBuilder.CELL_CURSOR_RADIUS_RATIO = radius;
+  }
 });
 
 // The minimum base width moves a cell but does not use or skip any random numbers.
@@ -44,7 +60,7 @@ test("seed 323 still builds the same cloud (random call order is stable)", () =>
 // size, as the dome radius was made to fit the width as well as the height.)
 test("with no minimum base width, seed 323 builds the cloud it should", () => {
   const noMinimum = build(323, 15, 600, 400, { minBaseWidth: 0 });
-  assert.equal(hashOf(noMinimum), "7749ef45c954e0ff6edcf1fd1c31276b0d80adc0");
+  assert.equal(hashOf(noMinimum), "c59c4b45068a0fc7dee24cb971e1dd705f626736");
 });
 
 test("the dome is small enough for the cloud to fit the canvas across as well as up", () => {
