@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/joshua-dallas/cumulus/actions/workflows/ci.yml/badge.svg)](https://github.com/joshua-dallas/cumulus/actions/workflows/ci.yml)
 
-A custom HTML element, `<cumulus-canvas>`, that draws a generative cumulus cloud on a canvas in a hand-hatched style. The picture is made of thousands of short, slightly wavy horizontal strokes whose colour gives the shade. Each cloud is built from a seed number, so the same seed always gives the same cloud.
+A custom HTML element, `<cumulus-canvas>`, that creates a hatched drawing of a cumulus cloud on a canvas. The clouds are made generatively using a seed number. The picture is made of horizontal lines that have noise applied to their lightness and thickness to imitate the stroke of a pen. There is also a slight wave applied to lines to mimic hand-drawing.
 
 ![A cumulus cloud drawn by Cumulus](docs/screenshot.png)
 
@@ -15,7 +15,7 @@ A custom HTML element, `<cumulus-canvas>`, that draws a generative cumulus cloud
 
 ## Install
 
-The package is installed from GitHub for now (it is not on the npm registry yet):
+The package is installed from GitHub:
 
 ```sh
 npm install github:joshua-dallas/cumulus#v1.0.2
@@ -69,8 +69,8 @@ A resize rebuild does not replay the grow-in, and a cloud made by clicking keeps
 
 - `element.currentSeed`: the seed of the cloud on show.
 - `seedchange` event: fired (it bubbles) when a click gives the cloud a new seed. `event.detail.seed` is the seed.
-- `element.setShadowDiagonal({ day: { angle, xOriginOffset }, sunset: { ... } })`: moves the edge of the shadow. Angles are in radians; `xOriginOffset` is where the edge meets the base of the dome, measured from the dome centre in dome radii (negative is left). Anything left out is unchanged.
-- `element.setThemeValues({ colours: { dark: { light: 40 } }, layers: { cell: { lineWidth: 1.5 } } })`: changes colours (hue, saturation, lightness), line widths, wave periods and amplitudes, and padding (`paddingScale`) of the layers. Only the values passed are changed, and they last through rebuilds.
+- `element.setShadowDiagonal({ day: { angle, xOriginOffset }, sunset: { ... } })`: moves the edge of the shadow. Angles are in radians; `xOriginOffset` is where the edge meets the base of the dome that contains the cloud, measured from the dome centre in dome radii (negative is left). Anything left out is unchanged.
+- `element.setThemeValues({ colours: { dark: { light: 40 } }, layers: { cell: { lineWidth: 1.5 } } })`: changes colours (hue, saturation, lightness), line widths, wave periods and amplitudes, and padding (`paddingScale`) of the layers that make up the cloud. Only the values passed are changed, and they last through rebuilds.
 
 The demo page uses all of these: its sliders call `setThemeValues` and `setShadowDiagonal` and show the changed values as JSON.
 
@@ -81,12 +81,12 @@ The spaces between the lines are see-through, so whatever is behind the canvas o
 ### Mouse, resizing, motion
 
 - **Mouse:** the mouse can click (`regenerateOnClick`) and push cells sideways out of its way (`mouseRepel`).
-- **Resizing:** leave `width` and `height` off and size the element with CSS (for example `cumulus-canvas { width: 100%; height: 400px }`) to make the cloud fill its container. It is rebuilt when the element's size changes, drawn at the device pixel ratio current at that time (a zoom or monitor change on its own does not trigger a rebuild yet).
+- **Resizing:** leave `width` and `height` off and size the element with CSS (for example `cumulus-canvas { width: 100%; height: 400px }`) to make the cloud fill its container. It is rebuilt when the element's size changes, and drawn at the device pixel ratio at that time (a zoom or monitor change on its own does not trigger a rebuild yet).
 - **Performance and accessibility:** the animation pauses while the element is scrolled out of view or the tab is hidden. With `prefers-reduced-motion: reduce` the finished cloud is drawn once, with no animation and no mouse effect.
 
 ### Browser support
 
-Any current browser with ES modules and custom elements. Where a web worker can draw to a canvas (`OffscreenCanvas`), the cloud is built and drawn in a worker; otherwise it runs on the main thread. The worker file is found relative to the built library, so `dist/` works wherever it is served. A site that pre-bundles the package (for example Vite's dev `optimizeDeps`) can break that relative URL; exclude the package from pre-bundling if so.
+Any current browser with ES modules and custom elements. Where a web worker can draw to a canvas (`OffscreenCanvas`), the cloud is built and drawn in a worker; otherwise it runs on the main thread. The worker file is found relative to the built library, so `dist/` works wherever it is served. A site that pre-bundles the package (for example Vite's dev `optimizeDeps`) can break that relative URL; exclude the package from pre-bundling if that happens.
 
 ## How it works
 
@@ -95,6 +95,8 @@ A cloud is modelled as three kinds of shape, built by `CloudBuilder` (`src/lib/c
 - **Cells**: circles that make up the body of the cloud.
 - **Fills**: regions between cells (polygons and half-circles along the centre line) that are shaded differently.
 - **Fractals**: small light and dark circles inside each cell that give the fluffy look.
+
+Conceptually, the cloud is built within a constraining dome. This dome is a half circle pointing upwards. Cells are placed at random in the dome, using the cloud's seed. As a result, clouds are wider at the bottom than at the top. Additionally, the fill between the cells is created by extending from each cell to the centre line of the dome.
 
 `Cumulus` (`src/cumulus.js`) is the custom element and handles attributes, resizing and lifecycle. It creates a `CumulusController` (`src/lib/cumulus-controller.js`), which turns the cloud into styled layers (styles live in `src/lib/theme.js`), moves the cells with `CloudSimulation` and hands the layers to the renderer (`src/lib/hatched-renderer.js`). The renderer splits the canvas into horizontal lines, works out which layer is visible along each stretch of each line, and strokes each stretch as a wavy, noisy line, with a diagonal shadow edge across the cloud. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a detailed walkthrough.
 
@@ -109,7 +111,7 @@ npm run lint         # ESLint
 npm run format       # Prettier (format:check only checks)
 npm test             # unit tests (no browser needed)
 npm run test:e2e     # the element in a real browser (Playwright; run `npx playwright install chromium` once)
-npm run check        # lint, format check, tests and build: what CI runs
+npm run check        # lint, format check, audit, tests and build: what CI runs
 ```
 
 The unit tests use Node's built-in runner and run without a browser. The custom element itself is tested in Chromium with Playwright (`e2e/`).

@@ -44,7 +44,7 @@ export class CloudBuilder {
   static FILL_CIRCLES_PER_EDGE = 12;
 
   // Settings for the simulation, stored on each cell
-  static CELL_RETURN_SPEED = 0.02; // Fraction of the distance back to the base covered each frame
+  static CELL_RETURN_SPEED = 0.01; // Fraction of the distance back to the base covered each frame
   static CELL_CURSOR_RADIUS_RATIO = 3; // How close the cursor must be to push a cell, ratio of its radius
 
   // options is the cloud part of a theme (see theme.js):

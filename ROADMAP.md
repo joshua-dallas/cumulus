@@ -72,40 +72,24 @@ These were `// TODO` comments in the code. They are grouped by where they were.
 
 ### Renderer (`hatched-renderer.js`)
 
-- [ ] Use typed shapes for layer, line and segment.
 - [ ] Setters for the style parameters (`defaultLineWidth`, `lineSpacing`, `backgroundBorderNoise`, ...), maybe with get/set that trigger a re-render.
-- [ ] Continuous (Perlin) noise for the y offset, lightness and edge noise (line width noise already is), and an x wave per line.
+- [ ] Continuous (Perlin) noise for the y offset, lightness and edge noise.
 - [ ] A separate setting for the background line width gradient so lines can be thicker at the top (today they only get thicker down the page, `backgroundLineWidthGradientDown`).
-- [ ] Padding noise.
 - [ ] Smooth the line width and y offset between segments, with a flag to turn it on.
 - [ ] A flag set in `finaliseRenderer` that `draw` checks, so drawing before finalising fails clearly.
-- [ ] Only create noise where it is enabled, or only apply it where it is enabled, and make clear that `initialiseNoise` runs after all parameters are set.
-- [ ] More line breaks in the background.
 - [ ] More lightness noise in the shadow region.
-- [ ] When positions are not whole numbers, floor the y offset.
-- [ ] Set each line's `startX` from the background padding and mask, and sort out `endX`.
 - [ ] Check that `setBackgroundBorderNoise` is given a positive number.
-- [ ] `addBackground` must be called first; consider keeping the background apart from the layers.
-- [ ] Find a cleaner way to get the draw step index in `getStrokeColour`, and check that it behaves as intended.
 - [ ] Top and bottom noise for the inner fills (theme).
-- [ ] Try the cell layer without `rightPadding` (theme).
-- [x] Higher chance of line breaks, and longer ones, on the first and last line.
-- [x] Line width gradient down the background.
-- [x] Compute the y offsets once before drawing.
-- [x] The noise lookup for a stroke that ends on the right edge no longer reads past the end of the arrays (`drawStepIndex`).
 
 ### Builder (`cloud-builder.js`) (all of these change seeds unless they only rename or move code)
 
 - [ ] Extra padding so cells can grow and rise.
-- [ ] Flag which lines changed between animation frames.
 - [ ] Random `upperExtension` and `lowerExtension` for a cell.
 - [ ] Randomise the radius ratio of stepped child cells.
 - [ ] Fractals: better names, a fractal count that depends on the cell radius, a minimum distance and a limit on the largest radius, a random shadow angle for the light fractals, better angle ranges, and a check that the direction of y is right for the lower-right `rightPadding`.
 - [ ] Check whether the cloud looks better without sorting fractals largest to smallest.
 - [ ] Fill circles on horizontal edges: a better name for the maximum straight length (it may be too large), and a number of circles that depends on the edge length.
 - [ ] Better names in `fillCentreLineGaps`, and note where horizontal breaks could be removed if wanted.
-- [x] Tuning numbers (stepped children, fractals, fill circles, the per-cell simulation settings) are named `static` constants at the top of `CloudBuilder`.
-- [x] Centre the cloud on the dome (`centreCells` centres the middle of the extents, not a weighted centre).
 
 ### Simulation, controller and utilities
 
