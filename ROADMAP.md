@@ -13,7 +13,7 @@ Changing how a cloud is generated (`CloudBuilder`) changes the cloud every exist
 - [ ] **More realistic growth.** Growth is a uniform scale about the base; cells could grow at different times, rise and billow individually.
 - [ ] **More realistic clouds.** Shade by light direction, and make growth, rising, drift and dissipation behave more like real cumulus.
 - [ ] **Theming API.** `setThemeValues` changes colours and layer styles. Still to do: a `theme` property or CSS custom properties.
-- [x] The renderer's noise comes from the seed the element starts with (offset from it). A click changes the cloud's shape but keeps the line widths, lightness and y offsets.
+- [x] The renderer's noise comes from the seed the element starts with (offset from it). A click changes the cloud's shape and the wobble of its edges (which follow the new seed) but keeps the line widths, lightness and y offsets.
 - [x] Randomise the seed when none is given (the element picks one, and keeps it through rebuilds).
 - [ ] **Smaller padding and noise for small screens** (phones), as a separate theme.
 - [x] Rebuild on attribute change (`observedAttributes`, `ResizeObserver`, one `rebuild()`).

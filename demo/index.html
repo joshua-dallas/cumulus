@@ -27,8 +27,16 @@
           mouseRepel
         ></cumulus-canvas>
         <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-500">
-          <p>Click the cloud to make a new one.</p>
-          <p>Seed: <span id="seed" class="font-mono font-medium text-blue-950"></span></p>
+          <p>Click the cloud to make a new one, or type a seed and press Enter.</p>
+          <label class="flex items-center gap-2">
+            <span>Seed</span>
+            <input
+              id="seed"
+              type="number"
+              step="1"
+              class="w-32 rounded-md border border-slate-300 px-2 py-1 font-mono font-medium text-blue-950"
+            />
+          </label>
           <button
             id="sunset-button"
             type="button"
@@ -93,13 +101,32 @@
       import "../src/define.js";
       import { createSunsetTheme, createTheme } from "../src/lib/theme.js";
 
-      const cloud = document.getElementById("c1");
+      let cloud = document.getElementById("c1");
 
-      // Show the seed of the cloud, and update it when a click makes a new one
+      // What has been changed through the element's methods. A new element is made when the
+      // seed is typed in, so these are applied to it again
+      const values = { colours: {}, layers: {} }; // theme values, also copied out below
+      const shadow = { day: {}, sunset: {} };
+
+      // The seed of the cloud on show: updated when a click makes a new one, and editable.
+      // A seed that is typed in builds a whole new element, so the cloud grows in again
       const seed = document.getElementById("seed");
-      seed.textContent = cloud.currentSeed;
-      cloud.addEventListener("seedchange", (event) => {
-        seed.textContent = event.detail.seed;
+      const showSeed = () => (seed.value = cloud.currentSeed ?? cloud.getAttribute("seed"));
+      const watchSeed = () => cloud.addEventListener("seedchange", showSeed);
+      showSeed();
+      watchSeed();
+      seed.addEventListener("change", () => {
+        const typed = seed.value.trim();
+        if (typed === "" || !Number.isFinite(Number(typed))) return showSeed();
+
+        const next = cloud.cloneNode(false); // the same attributes (growIn, sunset, ...)
+        next.setAttribute("seed", typed);
+        next.setThemeValues(structuredClone(values));
+        next.setShadowDiagonal(structuredClone(shadow));
+        cloud.replaceWith(next);
+        cloud = next;
+        watchSeed();
+        showSeed();
       });
 
       // The sunset is an attribute of the element: adding it fades the sky to a sunset,
@@ -173,7 +200,6 @@
 
       const container = document.getElementById("style-sliders");
       const output = document.getElementById("style-values");
-      const values = { colours: {}, layers: {} }; // what has been set, to copy out
 
       const addSlider = (parent, label, start, { min, max, step }, onChange) => {
         const wrapper = document.createElement("label");
@@ -231,7 +257,9 @@
         value.textContent = `${start}${unit}`;
         input.addEventListener("input", () => {
           value.textContent = `${input.value}${unit}`;
-          cloud.setShadowDiagonal({ [stage]: { [key]: read(Number(input.value)) } });
+          const change = { [key]: read(Number(input.value)) };
+          cloud.setShadowDiagonal({ [stage]: change });
+          Object.assign(shadow[stage], change);
         });
       }
     </script>

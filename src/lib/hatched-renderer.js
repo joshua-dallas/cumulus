@@ -80,6 +80,7 @@ export class HatchedRenderer {
     // Random number generation
     this.seed = seed;
     this.random = mulberry32(this.seed);
+    this.edgeSeed = seed; // Edge noise has its own seed, see setEdgeSeed
     this.noise = {
       // Edge noise is cached per layer key (not layer index) so that it stays
       // attached to the same shape even if layers are added or removed between frames
@@ -186,6 +187,12 @@ export class HatchedRenderer {
     this.generateShadowDiagonalEdge();
     this.calculateBaseYOffset();
     this.addBackground();
+  }
+
+  // Gives the shapes' edges new noise, for a new cloud. Nothing else in the noise changes
+  setEdgeSeed(seed) {
+    this.edgeSeed = seed;
+    this.noise.layerEdge.clear();
   }
 
   initialiseNoise() {
@@ -437,12 +444,12 @@ export class HatchedRenderer {
   // The random value is cached, and scaled by range each time it is used. The
   // range can change (it shrinks with the cloud while it grows), but the noise
   // stays the same. An unset entry is undefined: 0 is a valid cached value
-  // The noise value depends only on the seed, the edge ("cell-4|left") and the line, never
+  // The noise value depends only on the edge seed, the edge ("cell-4|left") and the line, never
   // on which shapes were drawn first, so a cloud has the same edges however it got there
   getCachedEdgeOffset(offsets, lineId, range, edge) {
     let unitNoise = offsets[lineId];
     if (unitNoise === undefined) {
-      unitNoise = hashToUnit(this.seed, edge, lineId) - 0.5;
+      unitNoise = hashToUnit(this.edgeSeed, edge, lineId) - 0.5;
       offsets[lineId] = unitNoise;
     }
     return Math.round(unitNoise * range);

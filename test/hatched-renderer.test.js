@@ -179,6 +179,32 @@ test("edge noise depends on the seed, the edge and the line, not on what was dra
   assert.notEqual(line0[0], line0[1]); // left and right edges differ
 });
 
+test("setEdgeSeed gives the edges new noise and leaves the rest of the noise alone", () => {
+  const make = (seed) => {
+    const renderer = new HatchedRenderer(mockCanvas(), 120, 60, 1, 1.5, undefined, seed);
+    renderer.generateLines();
+    renderer.applyTheme(createTheme());
+    renderer.finaliseRenderer();
+    return renderer;
+  };
+  const layer = { id: 0, key: "cell-1", leftEdgeNoise: 1000, rightEdgeNoise: 1000 };
+  const edges = (renderer) =>
+    [0, 1, 2, 3].map((lineId) => renderer.addEdgeNoise(0, 0, layer, lineId));
+
+  const renderer = make(5);
+  const before = edges(renderer);
+  const otherNoise = structuredClone({ ...renderer.noise, layerEdge: undefined });
+  assert.equal(renderer.noise.layerEdge.size, 1);
+
+  renderer.setEdgeSeed(9);
+  assert.equal(renderer.noise.layerEdge.size, 0);
+  const after = edges(renderer);
+  assert.notDeepEqual(after, before);
+  assert.deepEqual(after, edges(make(9))); // the edges a renderer with that seed has
+  assert.deepEqual({ ...renderer.noise, layerEdge: undefined }, otherNoise);
+  assert.equal(renderer.seed, 5);
+});
+
 test("line width noise is smooth Perlin noise within the noise range", () => {
   // A realistic width, so there are many steps between nodes whatever the node count
   const renderer = new HatchedRenderer(mockCanvas(), 600, 50, 1, 1.5);

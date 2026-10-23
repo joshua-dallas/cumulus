@@ -226,9 +226,10 @@ test("the same seed gives the same noise, and a different seed different noise",
   assert.notEqual(a.renderer.seed, a.seed); // offset from the builder's seed
 });
 
-test("clicking the cloud gives it a new shape but keeps the line widths, lightness and y offsets", () => {
+test("clicking the cloud gives it a new shape and edges, but keeps the other noise", () => {
   const { controller } = create({ regenerateOnClick: true, randomSeed: () => 4242 });
   const before = structuredClone(noiseOf(controller));
+  const edgesBefore = structuredClone(controller.renderer.noise.layerEdge.get("cell-0"));
   const rendererSeed = controller.renderer.seed;
   const cell = controller.builder.cells[0];
 
@@ -238,8 +239,22 @@ test("clicking the cloud gives it a new shape but keeps the line widths, lightne
   assert.equal(controller.seed, 4242);
   assert.equal(controller.scale, 1);
 
+  // Line widths, lightness and y offsets are the same
   assert.equal(controller.renderer.seed, rendererSeed);
   assert.deepEqual(noiseOf(controller), before);
+
+  // The edges are those of a cloud made from the new seed
+  const edgesAfter = controller.renderer.noise.layerEdge.get("cell-0");
+  assert.notDeepEqual(edgesAfter, edgesBefore);
+  const fresh = create({ seed: 4242 }).controller;
+  for (const [key, edges] of fresh.renderer.noise.layerEdge) {
+    const other = controller.renderer.noise.layerEdge.get(key);
+    for (const side of ["left", "right"]) {
+      edges[side].forEach((value, lineId) =>
+        assert.equal(other[side][lineId], value, `${key} ${side}`),
+      );
+    }
+  }
 });
 
 // ---- grow in -------------------------------------------------------------------------------

@@ -15,8 +15,8 @@ import { clamp01, easeInOutCubic, easeOutCubic } from "./easing.js";
 const MAX_FRAME_MS = 100;
 
 // The renderer's noise (line widths, lightness, y offsets) comes from the seed the
-// controller starts with, and stays the same when a click replaces the cloud. It is
-// offset, because the same seed would give the renderer the same random numbers as the
+// controller starts with, and stays the same when a click replaces the cloud. The wobble
+// of the shapes' edges follows the current cloud's seed. Both are offset, because the same seed would give the renderer the same random numbers as the
 // builder, and the builder's cell positions would line up with the noise
 const RENDERER_SEED_OFFSET = 0x9e3779b9;
 const rendererSeed = (seed) => seed + RENDERER_SEED_OFFSET;
@@ -246,6 +246,7 @@ export class CumulusController {
 
   replaceCloud(seed) {
     this.buildCloud(seed);
+    this.renderer.setEdgeSeed(rendererSeed(seed)); // the edges follow the new cloud's seed
     this.config.onSeedChange?.(seed);
   }
 

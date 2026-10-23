@@ -6,7 +6,7 @@ A custom HTML element, `<cumulus-canvas>`, that draws a generative cumulus cloud
 
 ![A cumulus cloud drawn by Cumulus](docs/screenshot.png)
 
-**[Live demo](https://joshua-dallas.github.io/cumulus/)**: click the cloud for a new one, fade the sky to a sunset, and move the shadow edge.
+**[Live demo](https://joshua-dallas.github.io/cumulus/)**: click the cloud for a new one (or type a seed), fade the sky to a sunset, and move the shadow edge.
 
 - Plain ES modules, no framework, no runtime dependencies.
 - Draws in a web worker (on an `OffscreenCanvas`) so it never blocks the page, with a main-thread fallback.
