@@ -15,13 +15,21 @@ A custom HTML element, `<cumulus-canvas>`, that creates a hatched drawing of a c
 
 ## Install
 
-The package is installed from GitHub:
-
 ```sh
-npm install github:joshua-dallas/cumulus#v1.0.2
+npm install @joshua-dallas/cumulus
 ```
 
-Use a release tag (see the [tags](https://github.com/joshua-dallas/cumulus/tags)), not just the branch, so an install always gets the same code. Installing runs `npm run build` (the `prepare` script), so the machine doing the install needs `git` and a normal Node setup. Import it by the package name, `@joshua-dallas/cumulus`, as below. To update, install a newer tag. If npm reports that the install script of `@joshua-dallas/cumulus` was skipped, allow it with `npm install-scripts approve @joshua-dallas/cumulus`.
+Import it by the package name, `@joshua-dallas/cumulus`, as below.
+
+### From GitHub
+
+To install a release straight from this repository instead, use a release tag (see the [tags](https://github.com/joshua-dallas/cumulus/tags)), not just the branch, so an install always gets the same code:
+
+```sh
+npm install github:joshua-dallas/cumulus#v1.1.1
+```
+
+Installing from GitHub runs `npm run build` (the `prepare` script), so the machine doing the install needs `git` and a normal Node setup. To update, install a newer tag. If npm reports that the install script of `@joshua-dallas/cumulus` was skipped, allow it with `npm install-scripts approve @joshua-dallas/cumulus`.
 
 ## Use
 

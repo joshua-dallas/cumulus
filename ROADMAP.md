@@ -42,7 +42,7 @@ Changing how a cloud is generated (`CloudBuilder`) changes the cloud every exist
 
 ## Package and project
 
-- [ ] **Publish to npm.** The package is installed from GitHub for now. To move: `npm login`, then `npm publish --access public`, change the README Install section to `npm install @joshua-dallas/cumulus`. (`prepare` also runs before `npm publish`, so `dist/` is built then too.)
+- [ ] **Publish to npm.** `publishConfig` already points at the public registry. Log in (`npm login --registry=https://registry.npmjs.org/`), run `npm publish --dry-run`, then `npm publish`. `prepare` builds `dist/` before publishing. After that, point `joshuadallas.com` at the npm version.
 - [x] Tests for the custom element, in Chromium with Playwright (`e2e/`).
 - [ ] Types: JSDoc typedefs for the controller config, the theme and the renderer's layer, line and segment shapes; then turn on `checkJs`.
 - [ ] A coverage report (`node --test --experimental-test-coverage`) shown in the CI output.

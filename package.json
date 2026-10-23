@@ -21,6 +21,10 @@
     "cloud",
     "cumulus"
   ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
   "main": "./dist/cumulus.js",
   "module": "./dist/cumulus.js",
   "types": "./dist/types/index.d.ts",
